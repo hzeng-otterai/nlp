@@ -66,7 +66,7 @@ class QuoraParaphraseDatasetReader(DatasetReader):
                     label, s1, s2 = row[0], row[1], row[2]
                     yield self.text_to_instance(label, s1, s2)
         else:
-            with zipfile.ZipFile(file_name, 'r') as my_zip:
+            with zipfile.ZipFile(cached_path(file_name), 'r') as my_zip:
                 with my_zip.open(member, "r") as member_file:
                     logger.info("Reading instances from lines in file at: %s", file_path)
                     data_file = io.TextIOWrapper(member_file)

@@ -3,14 +3,14 @@
     "type": "quora_paraphrase",
     "lazy": true
   },
-  "train_data_path": "/Users/huajunzeng/data/Quora_question_pair_partition/train.tsv",
-  "validation_data_path": "/Users/huajunzeng/data/Quora_question_pair_partition/dev.tsv",
+  "train_data_path": "(/data/Quora_question_pair_partition.zip)#Quora_question_pair_partition/train.tsv",
+  "validation_data_path": "(/data/Quora_question_pair_partition.zip)#Quora_question_pair_partition/dev.tsv",
   "model": {
     "type": "bimpm",
     "text_field_embedder": {
       "tokens": {
         "type": "embedding",
-        "pretrained_file": "/Users/huajunzeng/data/Quora_question_pair_partition/wordvec.txt",
+        "pretrained_file": "(/data/Quora_question_pair_partition.zip)#Quora_question_pair_partition/wordvec.txt",
         "embedding_dim": 300,
         "trainable": false
       }
@@ -18,7 +18,7 @@
     "encoder": {
       "type": "lstm",
       "bidirectional": true,
-      "input_size": 100,
+      "input_size": 300,
       "hidden_size": 100,
       "num_layers": 1,
       "dropout": 0.2

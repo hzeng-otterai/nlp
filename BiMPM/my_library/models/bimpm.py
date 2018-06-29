@@ -49,9 +49,12 @@ class BiMPM(Model):
                 label: torch.LongTensor = None) -> Dict[str, torch.Tensor]:
  
         embedded_s1 = self.text_field_embedder(s1)
+        mask_s1 = util.get_text_field_mask(s1)
+        encoded_s1 = self.encoder(embedded_s1, mask_s1)
+
         embedded_s2 = self.text_field_embedder(s2)
-        encoded_s1 = self.encoder(embedded_s1)
-        encoded_s2 = self.encoder(embedded_s2)
+        mask_s2 = util.get_text_field_mask(s2)
+        encoded_s2 = self.encoder(embedded_s2, mask_s2)
 
         logits = self.classifier_feedforward(torch.cat([encoded_s1, encoded_s1], dim=-1))
         output_dict = {'logits': logits}
