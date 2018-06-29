@@ -1,7 +1,13 @@
 {
   "dataset_reader": {
     "type": "quora_paraphrase",
-    "lazy": true
+    "lazy": true,
+    "tokenizer": {
+      "type": "word",
+      "word_splitter": {
+        "type": "just_spaces"
+      }
+    }
   },
   "train_data_path": "(/data/Quora_question_pair_partition.zip)#Quora_question_pair_partition/train.tsv",
   "validation_data_path": "(/data/Quora_question_pair_partition.zip)#Quora_question_pair_partition/dev.tsv",
