@@ -30,13 +30,8 @@ class BiMPM(Model):
         self.encoder = encoder
         self.classifier_feedforward = classifier_feedforward
 
-        if text_field_embedder.get_output_dim() != encoder.get_input_dim():
-            raise ConfigurationError("The output dimension of the text_field_embedder must match the "
-                                     "input dimension of the encoder. Found {} and {}, "
-                                     "respectively.".format(text_field_embedder.get_output_dim(),
-                                                            encoder.get_input_dim()))
         self.metrics = {
-                "accuracy": CategoricalAccuracy()
+            "accuracy": CategoricalAccuracy()
         }
         self.loss = torch.nn.CrossEntropyLoss()
 
@@ -56,7 +51,7 @@ class BiMPM(Model):
         mask_s2 = util.get_text_field_mask(s2)
         encoded_s2 = self.encoder(embedded_s2, mask_s2)
 
-        logits = self.classifier_feedforward(torch.cat([encoded_s1, encoded_s1], dim=-1))
+        logits = self.classifier_feedforward(torch.cat([encoded_s1, encoded_s2], dim=-1))
         output_dict = {'logits': logits}
         if label is not None:
             loss = self.loss(logits, label.squeeze(-1))
