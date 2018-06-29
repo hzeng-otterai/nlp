@@ -1,0 +1,4 @@
+allennlp
+pytest
+pytest-pythonpath
+
