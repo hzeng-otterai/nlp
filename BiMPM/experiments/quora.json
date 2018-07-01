@@ -1,7 +1,7 @@
 {
   "dataset_reader": {
     "type": "quora_paraphrase",
-    "lazy": true,
+    "lazy": false,
     "tokenizer": {
       "type": "word",
       "word_splitter": {
@@ -16,7 +16,7 @@
     "text_field_embedder": {
       "tokens": {
         "type": "embedding",
-        "pretrained_file": "(/data/Quora_question_pair_partition.zip)#Quora_question_pair_partition/wordvec.txt",
+        "pretrained_file": "https://s3-us-west-2.amazonaws.com/allennlp/datasets/glove/glove.840B.300d.txt.gz",
         "embedding_dim": 300,
         "trainable": false
       }

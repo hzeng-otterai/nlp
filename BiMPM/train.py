@@ -9,19 +9,10 @@ config_file = "experiments/quora.json"
 
 # Use overrides to train on CPU.
 overrides = json.dumps({
-    "train_data_path": "(/home/huajun/data/quora-question-pairs/bimpm_split/Quora_question_pair_partition.zip)#Quora_question_pair_partition/train.tsv",
-    "validation_data_path": "(/home/huajun/data/quora-question-pairs/bimpm_split/Quora_question_pair_partition.zip)#Quora_question_pair_partition/dev.tsv",
-    "trainer": {"cuda_device": -1},
-    "vocabulary": {
-        "directory_path": "/home/huajun/data/quora-question-pairs/bimpm_split/vocabulary"
-    },
-    "model": {
-        "text_field_embedder": {
-            "tokens": {
-                "pretrained_file": "(/home/huajun/data/quora-question-pairs/bimpm_split/Quora_question_pair_partition.zip)#Quora_question_pair_partition/wordvec.txt",
-            }
-        }
-    }
+    "train_data_path": "(/data/Quora_question_pair_partition.zip)#Quora_question_pair_partition/train.tsv",
+    "validation_data_path": "(/data/Quora_question_pair_partition.zip)#Quora_question_pair_partition/dev.tsv",
+    "trainer": {"cuda_device": 0},
+    "vocabulary": {"directory_path": "./temp/vocabulary"}
 })
 
 serialization_dir = "./temp/bimpm"
@@ -43,6 +34,6 @@ sys.argv = [
     "-o", overrides,
 ]
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.WARNING)
 
 main()
