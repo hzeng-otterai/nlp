@@ -9,8 +9,6 @@ config_file = "experiments/quora.json"
 
 # Use overrides to train on CPU.
 overrides = json.dumps({
-    "train_data_path": "(/data/Quora_question_pair_partition.zip)#Quora_question_pair_partition/train.tsv",
-    "validation_data_path": "(/data/Quora_question_pair_partition.zip)#Quora_question_pair_partition/dev.tsv",
     "trainer": {"cuda_device": 0},
     "vocabulary": {"directory_path": "./temp/vocabulary"}
 })

@@ -9,8 +9,8 @@
       }
     }
   },
-  "train_data_path": "(/data/Quora_question_pair_partition.zip)#Quora_question_pair_partition/train.tsv",
-  "validation_data_path": "(/data/Quora_question_pair_partition.zip)#Quora_question_pair_partition/dev.tsv",
+  "train_data_path": "(https://s3-us-west-1.amazonaws.com/handsomezebra/public/Quora_question_pair_partition.zip)#Quora_question_pair_partition/train.tsv",
+  "validation_data_path": "(https://s3-us-west-1.amazonaws.com/handsomezebra/public/Quora_question_pair_partition.zip)#Quora_question_pair_partition/dev.tsv",
   "model": {
     "type": "bimpm",
     "text_field_embedder": {
