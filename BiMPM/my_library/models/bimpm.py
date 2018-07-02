@@ -6,20 +6,23 @@ import torch
 import torch.nn.functional as F
 
 from allennlp.common import Params
-from allennlp.common.checks import ConfigurationError
 from allennlp.data import Vocabulary
-from allennlp.modules import FeedForward, Seq2VecEncoder, TextFieldEmbedder
+from allennlp.modules import FeedForward, Seq2SeqEncoder, Seq2VecEncoder, TextFieldEmbedder
 from allennlp.models.model import Model
 from allennlp.nn import InitializerApplicator, RegularizerApplicator
 from allennlp.nn import util
 from allennlp.training.metrics import CategoricalAccuracy
+
+from my_library.models.matching_layer import MatchingLayer
 
 
 @Model.register("bimpm")
 class BiMPM(Model):
     def __init__(self, vocab: Vocabulary,
                  text_field_embedder: TextFieldEmbedder,
-                 encoder: Seq2VecEncoder,
+                 encoder: Seq2SeqEncoder,
+                 matcher: MatchingLayer,
+                 aggregator: Seq2VecEncoder,
                  classifier_feedforward: FeedForward,
                  initializer: InitializerApplicator = InitializerApplicator(),
                  regularizer: Optional[RegularizerApplicator] = None) -> None:
@@ -28,6 +31,8 @@ class BiMPM(Model):
         self.text_field_embedder = text_field_embedder
         self.num_classes = self.vocab.get_vocab_size("label")
         self.encoder = encoder
+        self.matcher = matcher
+        self.aggregator = aggregator
         self.classifier_feedforward = classifier_feedforward
 
         self.metrics = {
@@ -43,15 +48,21 @@ class BiMPM(Model):
                 s2: Dict[str, torch.LongTensor],
                 label: torch.LongTensor = None) -> Dict[str, torch.Tensor]:
  
-        embedded_s1 = self.text_field_embedder(s1)
         mask_s1 = util.get_text_field_mask(s1)
+        mask_s2 = util.get_text_field_mask(s2)
+
+        embedded_s1 = self.text_field_embedder(s1)
         encoded_s1 = self.encoder(embedded_s1, mask_s1)
 
         embedded_s2 = self.text_field_embedder(s2)
-        mask_s2 = util.get_text_field_mask(s2)
         encoded_s2 = self.encoder(embedded_s2, mask_s2)
 
-        logits = self.classifier_feedforward(torch.cat([encoded_s1, encoded_s2], dim=-1))
+        mv_s1, mv_s2 = self.matcher(encoded_s1, encoded_s2)
+        agg_s1 = self.aggregator(mv_s1, mask_s1)
+        agg_s2 = self.aggregator(mv_s2, mask_s2)
+
+        logits = self.classifier_feedforward(torch.cat([agg_s1, agg_s2], dim=-1))
+
         output_dict = {'logits': logits}
         if label is not None:
             loss = self.loss(logits, label.squeeze(-1))
@@ -85,7 +96,9 @@ class BiMPM(Model):
     def from_params(cls, vocab: Vocabulary, params: Params) -> 'BiMPM':
         embedder_params = params.pop("text_field_embedder")
         text_field_embedder = TextFieldEmbedder.from_params(vocab, embedder_params)
-        encoder = Seq2VecEncoder.from_params(params.pop("encoder"))
+        encoder = Seq2SeqEncoder.from_params(params.pop("encoder"))
+        matcher = MatchingLayer.from_params(params.pop("matcher", {}))
+        aggregator = Seq2VecEncoder.from_params(params.pop("aggregator"))
         classifier_feedforward = FeedForward.from_params(params.pop("classifier_feedforward"))
 
         initializer = InitializerApplicator.from_params(params.pop('initializer', []))
@@ -94,6 +107,8 @@ class BiMPM(Model):
         return cls(vocab=vocab,
                    text_field_embedder=text_field_embedder,
                    encoder=encoder,
+                   matcher=matcher,
+                   aggregator=aggregator,
                    classifier_feedforward=classifier_feedforward,
                    initializer=initializer,
                    regularizer=regularizer)
