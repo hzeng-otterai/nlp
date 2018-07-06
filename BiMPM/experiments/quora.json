@@ -27,7 +27,7 @@
       "input_size": 300,
       "hidden_size": 100,
       "num_layers": 2,
-      "dropout": 0.2
+      "dropout": 0.1
     },
     "matcher": {},
     "aggregator":{
@@ -36,7 +36,7 @@
       "input_size": 160,
       "hidden_size": 100,
       "num_layers": 2,
-      "dropout": 0.2
+      "dropout": 0.1
     },
     "classifier_feedforward": {
       "input_dim": 400,
@@ -55,7 +55,7 @@
   },
   "iterator": {
     "type": "bucket",
-    "padding_noise": 0.0,
+    "padding_noise": 0.1,
     "sorting_keys": [["s1", "num_tokens"], ["s2", "num_tokens"]],
     "batch_size": 64
   },
