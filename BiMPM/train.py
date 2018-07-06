@@ -1,7 +1,7 @@
 import json
-import shutil
 import sys
 import logging
+import datetime
 
 from allennlp.commands import main
 
@@ -10,17 +10,11 @@ config_file = "experiments/quora.json"
 # Use overrides to train on CPU.
 overrides = json.dumps({
     "trainer": {"cuda_device": 0},
-    "vocabulary": {"directory_path": "./temp/vocabulary"}
+    #"vocabulary": {"directory_path": "./temp/vocabulary"}
 })
 
-serialization_dir = "./temp/bimpm"
+serialization_dir = "./output_" + datetime.datetime.now().strftime("%Y%m%dT%H%M%S")
 
-# Training will fail if the serialization directory already
-# has stuff in it. If you are running the same training loop
-# over and over again for debugging purposes, it will.
-# Hence we wipe it out in advance.
-# BE VERY CAREFUL NOT TO DO THIS FOR ACTUAL TRAINING!
-shutil.rmtree(serialization_dir, ignore_errors=True)
 
 # Assemble the command into sys.argv
 sys.argv = [
@@ -32,6 +26,6 @@ sys.argv = [
     "-o", overrides,
 ]
 
-logging.basicConfig(level=logging.WARNING)
+logging.basicConfig(level=logging.INFO)
 
 main()

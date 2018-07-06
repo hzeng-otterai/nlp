@@ -109,3 +109,6 @@ venv.bak/
 # temp
 temp/
 tmp/
+
+# output
+output*/
