@@ -7,6 +7,15 @@
       "word_splitter": {
         "type": "just_spaces"
       }
+    },
+    "token_indexers": {
+      "tokens": {
+        "type": "single_id",
+        "lowercase_tokens": false
+      },
+      "token_characters": {
+        "type": "characters"
+      }
     }
   },
   "train_data_path": "(https://s3-us-west-1.amazonaws.com/handsomezebra/public/Quora_question_pair_partition.zip)#Quora_question_pair_partition/train.tsv",
@@ -19,12 +28,27 @@
         "pretrained_file": "https://s3-us-west-2.amazonaws.com/allennlp/datasets/glove/glove.840B.300d.txt.gz",
         "embedding_dim": 300,
         "trainable": false
+      },
+      "token_characters": {
+        "type": "character_encoding",
+        "embedding": {
+          "embedding_dim": 20
+        },
+        "encoder": {
+          "type": "cnn",
+          "embedding_dim": 20,
+          "num_filters": 50,
+          "ngram_filter_sizes": [
+            5
+          ]
+        },
+        "dropout": 0.1
       }
     },
     "encoder": {
       "type": "lstm",
       "bidirectional": true,
-      "input_size": 300,
+      "input_size": 350,
       "hidden_size": 100,
       "num_layers": 2,
       "dropout": 0.1
@@ -71,4 +95,3 @@
     }
   }
 }
-
