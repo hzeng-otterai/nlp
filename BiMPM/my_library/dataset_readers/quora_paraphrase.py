@@ -64,7 +64,7 @@ class QuoraParaphraseDatasetReader(DatasetReader):
                     if len(row) != 4:
                         continue
                     label, s1, s2 = row[0], row[1], row[2]
-                    yield self.text_to_instance(label, s1, s2)
+                    yield self.text_to_instance(s1, s2, label)
         else:
             with zipfile.ZipFile(cached_path(file_name), 'r') as my_zip:
                 with my_zip.open(member, "r") as member_file:
@@ -75,16 +75,18 @@ class QuoraParaphraseDatasetReader(DatasetReader):
                         if len(row) != 4:
                             continue
                         label, s1, s2 = row[0], row[1], row[2]
-                        yield self.text_to_instance(label, s1, s2)
+                        yield self.text_to_instance(s1, s2, label)
 
     @overrides
-    def text_to_instance(self, label: str, s1: str, s2: str) -> Instance:  # type: ignore
+    def text_to_instance(self, s1: str, s2: str, label: str = None) -> Instance:  # type: ignore
         # pylint: disable=arguments-differ
         tokenized_s1 = self._tokenizer.tokenize(s1)
         tokenized_s2 = self._tokenizer.tokenize(s2)
         s1_field = TextField(tokenized_s1, self._token_indexers)
         s2_field = TextField(tokenized_s2, self._token_indexers)
-        fields = {'label': LabelField(label), 's1': s1_field, 's2': s2_field}
+        fields = {'s1': s1_field, 's2': s2_field}
+        if label is not None:
+            fields['label'] = LabelField(label)
 
         return Instance(fields)
 

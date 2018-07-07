@@ -15,6 +15,7 @@ sys.argv = [
     model_path,
     "--evaluation-data-file", test_file,
     "--include-package", "my_library",
+    "--cuda-device", "0"
 ]
 
 logging.basicConfig(level=logging.INFO)
