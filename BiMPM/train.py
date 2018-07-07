@@ -5,7 +5,7 @@ import datetime
 
 from allennlp.commands import main
 
-config_file = "experiments/quora.json"
+config_file = "experiments/quora_with_char.json"
 
 # Use overrides to train on CPU.
 overrides = json.dumps({

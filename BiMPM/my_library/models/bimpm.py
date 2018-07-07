@@ -83,7 +83,7 @@ class BiMPM(Model):
 
         predictions = class_probabilities.cpu().data.numpy()
         argmax_indices = numpy.argmax(predictions, axis=-1)
-        labels = [self.vocab.get_token_from_index(x, namespace="label")
+        labels = [self.vocab.get_token_from_index(x, namespace="labels")
                   for x in argmax_indices]
         output_dict['label'] = labels
         return output_dict
