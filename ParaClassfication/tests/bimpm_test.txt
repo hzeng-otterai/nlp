@@ -1,2 +1,0 @@
-{"s1": "Hello !", "s2": "How are you ?"}
-{"s1": "Who is the author of Harry Potter ?", "s2": "Who wrote the book Harry Potter ?"}

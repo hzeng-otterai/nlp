@@ -5,14 +5,15 @@ import datetime
 
 from allennlp.commands import main
 
-config_file = "experiments/quora_with_char.json"
+config_file = "experiments/quora_para_classification.json"
 
-# Use overrides to train on CPU.
+# Specify overrides
 overrides = json.dumps({
-    "trainer": {"cuda_device": 0},
+    "trainer": {"cuda_device": -1},
     #"vocabulary": {"directory_path": "./temp/vocabulary"}
 })
 
+# Specify output dir according to current time
 serialization_dir = "./output_" + datetime.datetime.now().strftime("%Y%m%dT%H%M%S")
 
 
@@ -22,7 +23,7 @@ sys.argv = [
     "train",
     config_file,
     "-s", serialization_dir,
-    "--include-package", "my_library",
+    "--include-package", "hznlp",
     "-o", overrides,
 ]
 

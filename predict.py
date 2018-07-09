@@ -14,8 +14,8 @@ sys.argv = [
     "predict",
     model_path,
     test_path,
-    "--include-package", "my_library",
-    "--predictor", "bimpm",
+    "--include-package", "nlp",
+    "--predictor", "paraphrasing",
 ]
 
 logging.basicConfig(level=logging.INFO)

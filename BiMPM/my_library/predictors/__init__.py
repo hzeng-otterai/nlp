@@ -1,1 +1,0 @@
-from my_library.predictors.bimpm_predictor import BiMPMPredictor

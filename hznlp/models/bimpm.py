@@ -13,7 +13,7 @@ from allennlp.nn import InitializerApplicator, RegularizerApplicator
 from allennlp.nn import util
 from allennlp.training.metrics import CategoricalAccuracy
 
-from my_library.models.matching_layer import MatchingLayer
+from hznlp.models.matching_layer import MatchingLayer
 
 
 @Model.register("bimpm")

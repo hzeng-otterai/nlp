@@ -6,9 +6,9 @@ from allennlp.common.util import JsonDict
 from allennlp.data import Instance
 from allennlp.predictors.predictor import Predictor
 
-@Predictor.register('bimpm')
-class BiMPMPredictor(Predictor):
-    """"Predictor wrapper for the BiMPM"""
+@Predictor.register('paraphrasing')
+class ParaphrasingPredictor(Predictor):
+    """"Predictor wrapper for the Paraphrasing"""
     def predict(self, s1: str, s2: str) -> JsonDict:
         return self.predict_json({"s1": s1, "s2": s2})
 

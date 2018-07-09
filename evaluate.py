@@ -5,17 +5,17 @@ import logging
 
 from allennlp.commands import main
 
-model_path = "./output_20180706T120500/model.tar.gz"
-test_path = "./tests/bimpm_test.txt"
+model_path = "./output_20180708T235328/model.tar.gz"
+test_file = "(https://s3-us-west-1.amazonaws.com/handsomezebra/public/Quora_question_pair_partition.zip)#Quora_question_pair_partition/test.tsv"
 
 # Assemble the command into sys.argv
 sys.argv = [
     "allennlp",  # command name, not used by main
-    "predict",
+    "evaluate",
     model_path,
-    test_path,
-    "--include-package", "my_library",
-    "--predictor", "bimpm",
+    "--evaluation-data-file", test_file,
+    "--include-package", "hznlp",
+    "--cuda-device", "0"
 ]
 
 logging.basicConfig(level=logging.INFO)

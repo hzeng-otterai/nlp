@@ -1,6 +1,11 @@
-# nlp
-Deep NLP algorithms based on PyTorch and AllenNLP
+# Deep NLP algorithms based on PyTorch and AllenNLP
 
-## BiMPM
-1. `cd BiMPM`
-2. `python train.py` or `allennlp train -s ./temp/bimpm --include-package my_library experiments/quora.json`
+## Requirements
+ - Python 3.6 (Anaconda preferred)
+ - PyTorch 0.4.0
+ - AllenNLP latest (`pip install git+git://github.com/allenai/allennlp.git`)
+
+## Algorithms
+ - BiMPM
+ - ParaClassification
+

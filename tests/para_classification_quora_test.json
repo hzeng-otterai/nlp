@@ -9,10 +9,10 @@
       }
     }
   },
-  "train_data_path": "tests/quora_sample.tsv",
-  "validation_data_path": "tests/quora_sample.tsv",
+  "train_data_path": "tests/quora_train_sample.tsv",
+  "validation_data_path": "tests/quora_train_sample.tsv",
   "model": {
-    "type": "bimpm",
+    "type": "para_classification",
     "text_field_embedder": {
       "tokens": {
         "type": "embedding",
@@ -24,15 +24,6 @@
       "type": "lstm",
       "bidirectional": true,
       "input_size": 300,
-      "hidden_size": 100,
-      "num_layers": 2,
-      "dropout": 0.1
-    },
-    "matcher": {},
-    "aggregator":{
-      "type": "lstm",
-      "bidirectional": true,
-      "input_size": 160,
       "hidden_size": 100,
       "num_layers": 2,
       "dropout": 0.1
