@@ -73,9 +73,9 @@ class BiMPM(Model):
         prob = torch.clamp(prob, min=0.0, max=1.0)
         output_dict = {'prob': prob}
         if label is not None:
-            loss = self.loss(prob, label.squeeze(-1))
+            loss = self.loss(prob, label.squeeze(-1).float())
             for metric in self.metrics.values():
-                metric(logits, label.squeeze(-1).float())
+                metric(prob, label.squeeze(-1))
             output_dict["loss"] = loss
 
         return output_dict
