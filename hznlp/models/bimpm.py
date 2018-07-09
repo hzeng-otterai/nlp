@@ -11,7 +11,7 @@ from allennlp.modules import FeedForward, Seq2SeqEncoder, Seq2VecEncoder, TextFi
 from allennlp.models.model import Model
 from allennlp.nn import InitializerApplicator, RegularizerApplicator
 from allennlp.nn import util
-from allennlp.training.metrics import CategoricalAccuracy
+from allennlp.training.metrics import CategoricalAccuracy, F1Measure
 
 from hznlp.models.matching_layer import MatchingLayer
 
@@ -35,9 +35,9 @@ class BiMPM(Model):
         self.aggregator = aggregator
         self.classifier_feedforward = classifier_feedforward
 
-        self.metrics = {
-            "accuracy": CategoricalAccuracy()
-        }
+        self.accuracy_metric = CategoricalAccuracy()
+        self.f1_metric = F1Measure(positive_label=1)
+
         self.loss = torch.nn.CrossEntropyLoss()
 
         initializer(self)
@@ -90,7 +90,9 @@ class BiMPM(Model):
 
     @overrides
     def get_metrics(self, reset: bool = False) -> Dict[str, float]:
-        return {metric_name: metric.get_metric(reset) for metric_name, metric in self.metrics.items()}
+        accuracy = self.accuracy_metric.get_metric(reset)
+        precision, recall, f1 = self.f1_metric.get_metric(reset)
+        return {"accuracy": accuracy, "precision": precision, "recall": recall, "f1": f1}
 
     @classmethod
     def from_params(cls, vocab: Vocabulary, params: Params) -> 'BiMPM':
