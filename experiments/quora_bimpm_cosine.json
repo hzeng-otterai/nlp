@@ -1,0 +1,76 @@
+{
+  "dataset_reader": {
+    "type": "quora_paraphrase",
+    "lazy": false,
+    "tokenizer": {
+      "type": "word",
+      "word_splitter": {
+        "type": "just_spaces"
+      }
+    }
+  },
+  "train_data_path": "(https://s3-us-west-1.amazonaws.com/handsomezebra/public/Quora_question_pair_partition.zip)#Quora_question_pair_partition/train.tsv",
+  "validation_data_path": "(https://s3-us-west-1.amazonaws.com/handsomezebra/public/Quora_question_pair_partition.zip)#Quora_question_pair_partition/dev.tsv",
+  "model": {
+    "type": "bimpm_cosine",
+    "text_field_embedder": {
+      "tokens": {
+        "type": "embedding",
+        "pretrained_file": "https://s3-us-west-2.amazonaws.com/allennlp/datasets/glove/glove.840B.300d.txt.gz",
+        "embedding_dim": 300,
+        "trainable": false
+      }
+    },
+    "encoder": {
+      "type": "lstm",
+      "bidirectional": true,
+      "input_size": 300,
+      "hidden_size": 100,
+      "num_layers": 2,
+      "dropout": 0.1
+    },
+    "matcher": {},
+    "aggregator":{
+      "type": "lstm",
+      "bidirectional": true,
+      "input_size": 160,
+      "hidden_size": 100,
+      "num_layers": 2,
+      "dropout": 0.1
+    },
+    "classifier_feedforward": {
+      "input_dim": 200,
+      "num_layers": 1,
+      "hidden_dims": [100],
+      "activations": ["tanh"],
+      "dropout": [0.1]
+    },
+    "similarity": {
+      "type": "cosine"
+    },
+    "initializer": [
+        [".*linear_layers.*weight", {"type": "xavier_normal"}],
+        [".*linear_layers.*bias", {"type": "constant", "val": 0}],
+        [".*weight_ih.*", {"type": "xavier_normal"}],
+        [".*weight_hh.*", {"type": "orthogonal"}],
+        [".*bias.*", {"type": "constant", "val": 0}]
+    ]
+  },
+  "iterator": {
+    "type": "bucket",
+    "padding_noise": 0.1,
+    "sorting_keys": [["s1", "num_tokens"], ["s2", "num_tokens"]],
+    "batch_size": 64
+  },
+  "trainer": {
+    "num_epochs": 40,
+    "patience": 10,
+    "cuda_device": 0,
+    "grad_clipping": 5.0,
+    "validation_metric": "+accuracy",
+    "optimizer": {
+      "type": "adam",
+      "lr": 0.001
+    }
+  }
+}
