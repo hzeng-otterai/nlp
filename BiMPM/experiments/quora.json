@@ -39,11 +39,14 @@
       "dropout": 0.1
     },
     "classifier_feedforward": {
-      "input_dim": 400,
-      "num_layers": 2,
-      "hidden_dims": [200, 2],
-      "activations": ["relu", "linear"],
-      "dropout": [0.1, 0.0]
+      "input_dim": 200,
+      "num_layers": 1,
+      "hidden_dims": [100],
+      "activations": ["relu"],
+      "dropout": [0.1]
+    },
+    "similarity": {
+      "type": "cosine"
     },
     "initializer": [
         [".*linear_layers.*weight", {"type": "xavier_normal"}],
