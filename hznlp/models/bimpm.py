@@ -66,8 +66,8 @@ class BiMPM(Model):
         output_dict = {'logits': logits}
         if label is not None:
             loss = self.loss(logits, label.squeeze(-1))
-            for metric in self.metrics.values():
-                metric(logits, label.squeeze(-1))
+            self.accuracy_metric(logits, label.squeeze(-1))
+            self.f1_metric(logits, label.squeeze(-1))
             output_dict["loss"] = loss
 
         return output_dict
