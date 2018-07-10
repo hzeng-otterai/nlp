@@ -1,1 +1,1 @@
-from hznlp.predictors.paraphrasing_predictor import ParaphrasingPredictor
+from hznlp.predictors.sentence_pair_predictor import SentencePairPredictor

@@ -2,11 +2,17 @@
 
 import sys
 import logging
+import glob
+import os
 
 from allennlp.commands import main
 
-model_path = "./output_20180706T120500/model.tar.gz"
-test_path = "./tests/bimpm_test.txt"
+# getting the last updated model
+files = list(filter(os.path.isfile, glob.glob("./output_*/model.tar.gz")))
+files.sort(key=lambda x: os.path.getmtime(x))
+model_path = files[-1]
+
+test_path = "./tests/quora_test_sample.txt"
 
 # Assemble the command into sys.argv
 sys.argv = [
@@ -14,8 +20,9 @@ sys.argv = [
     "predict",
     model_path,
     test_path,
-    "--include-package", "nlp",
-    "--predictor", "paraphrasing",
+    "--include-package", "hznlp",
+    "--predictor", "sentence_pair",
+    "--cuda-device", "-1"
 ]
 
 logging.basicConfig(level=logging.INFO)

@@ -5,6 +5,12 @@
  - PyTorch 0.4.0
  - AllenNLP latest (`pip install git+git://github.com/allenai/allennlp.git`)
 
+## Steps to reproduce
+ 1. python train.py
+ 2. python evaluate.py
+ 3. python predict.py
+ 4. ./webdemo.sh
+
 ## Algorithms
  - BiMPM
  - ParaClassification

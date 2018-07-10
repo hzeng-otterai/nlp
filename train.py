@@ -5,12 +5,12 @@ import datetime
 
 from allennlp.commands import main
 
-config_file = "experiments/quora_para_classification.json"
+config_file = "experiments/quora_bimpm_word_char(rnn).json"
 
 # Specify overrides
 overrides = json.dumps({
-    "trainer": {"cuda_device": -1},
-    #"vocabulary": {"directory_path": "./temp/vocabulary"}
+	"iterator": {"batch_size": 64},
+    "trainer": {"cuda_device": -1}
 })
 
 # Specify output dir according to current time
