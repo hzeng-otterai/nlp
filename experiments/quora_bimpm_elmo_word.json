@@ -13,9 +13,6 @@
         "type": "single_id",
         "lowercase_tokens": false
       },
-      "token_characters": {
-        "type": "characters"
-      },
       "elmo": {
         "type": "elmo_characters"
       }
@@ -32,20 +29,6 @@
         "embedding_dim": 300,
         "trainable": false
       },
-      "token_characters": {
-        "type": "character_encoding",
-        "embedding": {
-          "embedding_dim": 20
-        },
-        "encoder": {
-          "type": "gru",
-          "input_size": 20,
-          "hidden_size": 50,
-          "num_layers": 1,
-          "dropout": 0.1,
-          "bidirectional": true
-        }
-      },
       "elmo": {
         "type": "elmo_token_embedder",
         "dropout": 0.2,
@@ -57,7 +40,7 @@
     "encoder": {
       "type": "lstm",
       "bidirectional": true,
-      "input_size": 1424,
+      "input_size": 1324,
       "hidden_size": 100,
       "num_layers": 2,
       "dropout": 0.1
