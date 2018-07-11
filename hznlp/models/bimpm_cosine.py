@@ -12,6 +12,7 @@ from allennlp.modules.similarity_functions import SimilarityFunction
 from allennlp.models.model import Model
 from allennlp.nn import InitializerApplicator, RegularizerApplicator
 from allennlp.nn import util
+from allennlp.nn import Activation
 from allennlp.training.metrics import BooleanAccuracy
 
 from hznlp.models.matching_layer import MatchingLayer
@@ -24,7 +25,9 @@ class BiMPMCosine(Model):
                  encoder: Seq2SeqEncoder,
                  matcher: MatchingLayer,
                  aggregator: Seq2VecEncoder,
-                 classifier_feedforward: FeedForward,
+                 feedforward_straight: FeedForward,
+                 feedforward_cross: FeedForward,
+                 feedforward_activation: Activation,
                  similarity: SimilarityFunction,
                  initializer: InitializerApplicator = InitializerApplicator(),
                  regularizer: Optional[RegularizerApplicator] = None) -> None:
@@ -35,7 +38,9 @@ class BiMPMCosine(Model):
         self.encoder = encoder
         self.matcher = matcher
         self.aggregator = aggregator
-        self.classifier_feedforward = classifier_feedforward
+        self.feedforward_straight = feedforward_straight
+        self.feedforward_cross = feedforward_cross
+        self.feedforward_activation = feedforward_activation
         self.similarity = similarity
 
         self.metrics = {
@@ -64,8 +69,8 @@ class BiMPMCosine(Model):
         agg_s1 = self.aggregator(mv_s1, mask_s1)
         agg_s2 = self.aggregator(mv_s2, mask_s2)
 
-        fc_s1 = self.classifier_feedforward(agg_s1)
-        fc_s2 = self.classifier_feedforward(agg_s2)
+        fc_s1 = self.feedforward_activation(self.feedforward_straight(agg_s1) + self.feedforward_cross(agg_s2))
+        fc_s2 = self.feedforward_activation(self.feedforward_straight(agg_s2) + self.feedforward_cross(agg_s1))
 
         similarity = self.similarity(fc_s1, fc_s2)
 
@@ -108,7 +113,9 @@ class BiMPMCosine(Model):
         encoder = Seq2SeqEncoder.from_params(params.pop("encoder"))
         matcher = MatchingLayer.from_params(params.pop("matcher", {}))
         aggregator = Seq2VecEncoder.from_params(params.pop("aggregator"))
-        classifier_feedforward = FeedForward.from_params(params.pop("classifier_feedforward"))
+        feedforward_straight = FeedForward.from_params(params.pop("feedforward_straight"))
+        feedforward_cross = FeedForward.from_params(params.pop("feedforward_cross"))
+        feedforward_activation = Activation.by_name(params.pop("feedforward_activation", "linear"))()
         similarity = SimilarityFunction.from_params(params.pop("similarity"))
 
         initializer = InitializerApplicator.from_params(params.pop('initializer', []))
@@ -119,7 +126,9 @@ class BiMPMCosine(Model):
                    encoder=encoder,
                    matcher=matcher,
                    aggregator=aggregator,
-                   classifier_feedforward=classifier_feedforward,
+                   feedforward_straight=feedforward_straight,
+                   feedforward_cross=feedforward_cross,
+                   feedforward_activation=feedforward_activation,
                    similarity = similarity,
                    initializer=initializer,
                    regularizer=regularizer)

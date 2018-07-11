@@ -54,13 +54,21 @@
       "num_layers": 2,
       "dropout": 0.1
     },
-    "classifier_feedforward": {
+    "feedforward_straight": {
       "input_dim": 200,
       "num_layers": 1,
       "hidden_dims": [100],
-      "activations": ["tanh"],
+      "activations": ["linear"],
       "dropout": [0.1]
     },
+    "feedforward_cross": {
+      "input_dim": 200,
+      "num_layers": 1,
+      "hidden_dims": [100],
+      "activations": ["linear"],
+      "dropout": [0.1]
+    },
+    "feedforward_activation": "tanh",
     "similarity": {
       "type": "cosine"
     },
