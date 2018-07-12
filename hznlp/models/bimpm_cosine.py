@@ -60,17 +60,25 @@ class BiMPMCosine(Model):
         mask_s2 = util.get_text_field_mask(s2)
 
         embedded_s1 = self.text_field_embedder(s1)
+        embedded_s1 = F.dropout(embedded_s1, p=0.1, training=self.training)
         encoded_s1 = self.encoder(embedded_s1, mask_s1)
+        encoded_s1 = F.dropout(encoded_s1, p=0.1, training=self.training)
 
         embedded_s2 = self.text_field_embedder(s2)
+        embedded_s2 = F.dropout(embedded_s2, p=0.1, training=self.training)
         encoded_s2 = self.encoder(embedded_s2, mask_s2)
+        encoded_s2 = F.dropout(encoded_s2, p=0.1, training=self.training)
 
         mv_s1, mv_s2 = self.matcher(encoded_s1, encoded_s2)
         agg_s1 = self.aggregator(mv_s1, mask_s1)
+        agg_s1 = F.dropout(agg_s1, p=0.1, training=self.training)
         agg_s2 = self.aggregator(mv_s2, mask_s2)
+        agg_s2 = F.dropout(agg_s2, p=0.1, training=self.training)
 
         fc_s1 = self.feedforward_activation(self.feedforward_straight(agg_s1) + self.feedforward_cross(agg_s2))
+        fc_s1 = F.dropout(fc_s1, p=0.1, training=self.training)
         fc_s2 = self.feedforward_activation(self.feedforward_straight(agg_s2) + self.feedforward_cross(agg_s1))
+        fc_s2 = F.dropout(fc_s2, p=0.1, training=self.training)
 
         similarity = self.similarity(fc_s1, fc_s2)
 
