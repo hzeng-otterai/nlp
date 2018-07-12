@@ -7,7 +7,6 @@ import io
 
 from overrides import overrides
 
-from allennlp.common import Params
 from allennlp.common.file_utils import cached_path
 from allennlp.data.dataset_readers.dataset_reader import DatasetReader
 from allennlp.data.fields import LabelField, TextField
@@ -89,10 +88,3 @@ class QuoraParaphraseDatasetReader(DatasetReader):
 
         return Instance(fields)
 
-    @classmethod
-    def from_params(cls, params: Params) -> 'QuoraParaphraseDatasetReader':
-        lazy = params.pop('lazy', False)
-        tokenizer = Tokenizer.from_params(params.pop('tokenizer', {}))
-        token_indexers = TokenIndexer.dict_from_params(params.pop('token_indexers', {}))
-        params.assert_empty(cls.__name__)
-        return cls(lazy=lazy, tokenizer=tokenizer, token_indexers=token_indexers)

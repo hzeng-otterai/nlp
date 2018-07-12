@@ -5,7 +5,6 @@ from overrides import overrides
 import torch
 import torch.nn.functional as F
 
-from allennlp.common import Params
 from allennlp.data import Vocabulary
 from allennlp.modules import FeedForward, Seq2VecEncoder, TextFieldEmbedder
 from allennlp.models.model import Model
@@ -82,19 +81,4 @@ class ParaClassification(Model):
     def get_metrics(self, reset: bool = False) -> Dict[str, float]:
         return {metric_name: metric.get_metric(reset) for metric_name, metric in self.metrics.items()}
 
-    @classmethod
-    def from_params(cls, vocab: Vocabulary, params: Params) -> 'RNNClassification':
-        embedder_params = params.pop("text_field_embedder")
-        text_field_embedder = TextFieldEmbedder.from_params(vocab, embedder_params)
-        encoder = Seq2VecEncoder.from_params(params.pop("encoder"))
-        classifier_feedforward = FeedForward.from_params(params.pop("classifier_feedforward"))
 
-        initializer = InitializerApplicator.from_params(params.pop('initializer', []))
-        regularizer = RegularizerApplicator.from_params(params.pop('regularizer', []))
-
-        return cls(vocab=vocab,
-                   text_field_embedder=text_field_embedder,
-                   encoder=encoder,
-                   classifier_feedforward=classifier_feedforward,
-                   initializer=initializer,
-                   regularizer=regularizer)

@@ -1,11 +1,9 @@
 from typing import Dict, Optional
 
-import numpy
 from overrides import overrides
 import torch
 import torch.nn.functional as F
 
-from allennlp.common import Params
 from allennlp.data import Vocabulary
 from allennlp.modules import FeedForward, Seq2SeqEncoder, Seq2VecEncoder, TextFieldEmbedder
 from allennlp.modules.similarity_functions import SimilarityFunction
@@ -114,29 +112,3 @@ class BiMPMCosine(Model):
     def get_metrics(self, reset: bool = False) -> Dict[str, float]:
         return {metric_name: metric.get_metric(reset) for metric_name, metric in self.metrics.items()}
 
-    @classmethod
-    def from_params(cls, vocab: Vocabulary, params: Params) -> 'BiMPMCosine':
-        embedder_params = params.pop("text_field_embedder")
-        text_field_embedder = TextFieldEmbedder.from_params(vocab, embedder_params)
-        encoder = Seq2SeqEncoder.from_params(params.pop("encoder"))
-        matcher = MatchingLayer.from_params(params.pop("matcher", {}))
-        aggregator = Seq2VecEncoder.from_params(params.pop("aggregator"))
-        feedforward_straight = FeedForward.from_params(params.pop("feedforward_straight"))
-        feedforward_cross = FeedForward.from_params(params.pop("feedforward_cross"))
-        feedforward_activation = Activation.by_name(params.pop("feedforward_activation", "linear"))()
-        similarity = SimilarityFunction.from_params(params.pop("similarity"))
-
-        initializer = InitializerApplicator.from_params(params.pop('initializer', []))
-        regularizer = RegularizerApplicator.from_params(params.pop('regularizer', []))
-
-        return cls(vocab=vocab,
-                   text_field_embedder=text_field_embedder,
-                   encoder=encoder,
-                   matcher=matcher,
-                   aggregator=aggregator,
-                   feedforward_straight=feedforward_straight,
-                   feedforward_cross=feedforward_cross,
-                   feedforward_activation=feedforward_activation,
-                   similarity = similarity,
-                   initializer=initializer,
-                   regularizer=regularizer)

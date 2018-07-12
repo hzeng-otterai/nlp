@@ -3,7 +3,7 @@ from allennlp.common import Params
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
+from allennlp.common.registrable import FromParams
 
 def mp_matching_func(v1, v2, w):
     """
@@ -82,7 +82,7 @@ def div_with_small_value(n, d, eps=1e-8):
     return n / d
 
 
-class MatchingLayer(nn.Module):
+class MatchingLayer(nn.Module, FromParams):
     def __init__(self,
                  hidden_dim: int = 100,
                  num_perspective: int = 20,
@@ -210,18 +210,6 @@ class MatchingLayer(nn.Module):
         
         return mv_p, mv_h
 
-    @classmethod
-    def from_params(cls, params: Params) -> 'MatchingLayer':
-        hidden_dim = params.pop_int('hidden_dim', 100)
-        num_perspective = params.pop_int('num_perspective', 20)
-        dropout = params.pop_float('dropout', 0.1)
-        wo_full_match = params.pop_bool('wo_full_match', False)
-        wo_maxpool_match = params.pop_bool('wo_maxpool_match', False)
-        wo_attentive_match = params.pop_bool('wo_attentive_match', False)
-        wo_max_attentive_match = params.pop_bool('wo_max_attentive_match', False)
-        return cls(hidden_dim=hidden_dim, num_perspective=num_perspective, dropout=dropout,
-                   wo_full_match=wo_full_match, wo_maxpool_match=wo_maxpool_match,
-                   wo_attentive_match=wo_attentive_match, wo_max_attentive_match=wo_max_attentive_match)
 
 if __name__ == "__main__":
     torch.manual_seed(999)

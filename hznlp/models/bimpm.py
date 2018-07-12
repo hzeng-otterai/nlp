@@ -5,7 +5,6 @@ from overrides import overrides
 import torch
 import torch.nn.functional as F
 
-from allennlp.common import Params
 from allennlp.data import Vocabulary
 from allennlp.modules import FeedForward, Seq2SeqEncoder, Seq2VecEncoder, TextFieldEmbedder
 from allennlp.models.model import Model
@@ -94,23 +93,3 @@ class BiMPM(Model):
         precision, recall, f1 = self.f1_metric.get_metric(reset)
         return {"accuracy": accuracy, "precision": precision, "recall": recall, "f1": f1}
 
-    @classmethod
-    def from_params(cls, vocab: Vocabulary, params: Params) -> 'BiMPM':
-        embedder_params = params.pop("text_field_embedder")
-        text_field_embedder = TextFieldEmbedder.from_params(vocab, embedder_params)
-        encoder = Seq2SeqEncoder.from_params(params.pop("encoder"))
-        matcher = MatchingLayer.from_params(params.pop("matcher", {}))
-        aggregator = Seq2VecEncoder.from_params(params.pop("aggregator"))
-        classifier_feedforward = FeedForward.from_params(params.pop("classifier_feedforward"))
-
-        initializer = InitializerApplicator.from_params(params.pop('initializer', []))
-        regularizer = RegularizerApplicator.from_params(params.pop('regularizer', []))
-
-        return cls(vocab=vocab,
-                   text_field_embedder=text_field_embedder,
-                   encoder=encoder,
-                   matcher=matcher,
-                   aggregator=aggregator,
-                   classifier_feedforward=classifier_feedforward,
-                   initializer=initializer,
-                   regularizer=regularizer)
