@@ -2,6 +2,7 @@ import json
 import sys
 import logging
 import datetime
+import os.path as op
 
 from allennlp.commands import main
 
@@ -14,7 +15,9 @@ overrides = json.dumps({
 })
 
 # Specify output dir according to current time
-serialization_dir = "./output_" + datetime.datetime.now().strftime("%Y%m%dT%H%M%S")
+experiment_name = op.splitext(op.basename(config_file))[0]
+time_stamp = datetime.datetime.now().strftime("%Y%m%dT%H%M%S")
+serialization_dir = "./output_%s_%s" % (experiment_name, time_stamp) 
 
 
 # Assemble the command into sys.argv
