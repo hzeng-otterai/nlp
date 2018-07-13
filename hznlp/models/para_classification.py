@@ -37,20 +37,20 @@ class ParaClassification(Model):
 
     @overrides
     def forward(self,  # type: ignore
-                s1: Dict[str, torch.LongTensor],
-                s2: Dict[str, torch.LongTensor],
+                premise: Dict[str, torch.LongTensor],
+                hypothesis: Dict[str, torch.LongTensor],
                 label: torch.LongTensor = None) -> Dict[str, torch.Tensor]:
  
-        mask_s1 = util.get_text_field_mask(s1)
-        mask_s2 = util.get_text_field_mask(s2)
+        mask_p = util.get_text_field_mask(premise)
+        mask_h = util.get_text_field_mask(hypothesis)
 
-        embedded_s1 = self.text_field_embedder(s1)
-        encoded_s1 = self.encoder(embedded_s1, mask_s1)
+        embedded_p = self.text_field_embedder(premise)
+        encoded_p = self.encoder(embedded_p, mask_p)
 
-        embedded_s2 = self.text_field_embedder(s2)
-        encoded_s2 = self.encoder(embedded_s2, mask_s2)
+        embedded_h = self.text_field_embedder(hypothesis)
+        encoded_h = self.encoder(embedded_h, mask_h)
 
-        logits = self.classifier_feedforward(torch.cat([encoded_s1, encoded_s2], dim=-1))
+        logits = self.classifier_feedforward(torch.cat([encoded_p, encoded_h], dim=-1))
 
         output_dict = {'logits': logits}
         if label is not None:

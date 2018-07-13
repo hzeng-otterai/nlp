@@ -59,118 +59,89 @@ class ESIMBiMPM(Model):
         initializer(self)
 
     def forward(self,  # type: ignore
-                s1: Dict[str, torch.LongTensor],
-                s2: Dict[str, torch.LongTensor],
-                label: torch.IntTensor = None,
-                metadata: List[Dict[str, Any]] = None  # pylint:disable=unused-argument
-               ) -> Dict[str, torch.Tensor]:
-        # pylint: disable=arguments-differ
-        """
-        Parameters
-        ----------
-        s1 : Dict[str, torch.LongTensor]
-            From a ``TextField``
-        s2 : Dict[str, torch.LongTensor]
-            From a ``TextField``
-        label : torch.IntTensor, optional (default = None)
-            From a ``LabelField``
-        metadata : ``List[Dict[str, Any]]``, optional, (default = None)
-            Metadata containing the original tokenization of the s1 and
-            s2 with 's1_tokens' and 's2_tokens' keys respectively.
-
-        Returns
-        -------
-        An output dictionary consisting of:
-
-        label_logits : torch.FloatTensor
-            A tensor of shape ``(batch_size, num_labels)`` representing unnormalised log
-            probabilities of the entailment label.
-        label_probs : torch.FloatTensor
-            A tensor of shape ``(batch_size, num_labels)`` representing probabilities of the
-            entailment label.
-        loss : torch.FloatTensor, optional
-            A scalar loss to be optimised.
-        """
+                premise: Dict[str, torch.LongTensor],
+                hypothesis: Dict[str, torch.LongTensor],
+                label: torch.IntTensor = None) -> Dict[str, torch.Tensor]:
 
         # Shape: (batch_size, seq_length, embedding_dim)
-        embedded_s1 = self._text_field_embedder(s1)
-        embedded_s2 = self._text_field_embedder(s2)
-        s1_mask = get_text_field_mask(s1).float()
-        s2_mask = get_text_field_mask(s2).float()
+        embedded_p = self._text_field_embedder(premise)
+        embedded_h = self._text_field_embedder(hypothesis)
+        mask_p = get_text_field_mask(premise).float()
+        mask_h = get_text_field_mask(hypothesis).float()
 
         # apply dropout for LSTM
         if self.rnn_input_dropout:
-            embedded_s1 = self.rnn_input_dropout(embedded_s1)
-            embedded_s2 = self.rnn_input_dropout(embedded_s2)
+            embedded_p = self.rnn_input_dropout(embedded_p)
+            embedded_h = self.rnn_input_dropout(embedded_h)
 
-        # encode s1 and s2
+        # encode p and h
         # Shape: (batch_size, seq_length, encoding_layer_num * encoding_hidden_dim)
-        encoded_s1 = self._encoder(embedded_s1, s1_mask)
-        encoded_s2 = self._encoder(embedded_s2, s2_mask)
+        encoded_p = self._encoder(embedded_p, mask_p)
+        encoded_h = self._encoder(embedded_h, mask_h)
 
-        # Shape: (batch_size, s1_length, s2_length)
-        similarity_matrix = self._matrix_attention(encoded_s1, encoded_s2)
+        # Shape: (batch_size, p_length, h_length)
+        similarity_matrix = self._matrix_attention(encoded_p, encoded_h)
 
-        # Shape: (batch_size, s1_length, s2_length)
-        p2h_attention = last_dim_softmax(similarity_matrix, s2_mask)
-        # Shape: (batch_size, s1_length, encoding_layer_num * encoding_hidden_dim)
-        attended_s2 = weighted_sum(encoded_s2, p2h_attention)
+        # Shape: (batch_size, p_length, h_length)
+        p2h_attention = last_dim_softmax(similarity_matrix, mask_h)
+        # Shape: (batch_size, p_length, encoding_layer_num * encoding_hidden_dim)
+        attended_h = weighted_sum(encoded_h, p2h_attention)
 
-        # Shape: (batch_size, s2_length, s1_length)
-        h2p_attention = last_dim_softmax(similarity_matrix.transpose(1, 2).contiguous(), s1_mask)
-        # Shape: (batch_size, s2_length, encoding_layer_num * encoding_hidden_dim)
-        attended_s1 = weighted_sum(encoded_s1, h2p_attention)
+        # Shape: (batch_size, h_length, p_length)
+        h2p_attention = last_dim_softmax(similarity_matrix.transpose(1, 2).contiguous(), mask_p)
+        # Shape: (batch_size, h_length, encoding_layer_num * encoding_hidden_dim)
+        attended_p = weighted_sum(encoded_p, h2p_attention)
 
         # Using BiMPM to calculate matching vectors
         # Shape: (batch_size, seq_length, num_perspective * num_matching)
-        mv_s1, mv_s2 = self._matcher(encoded_s1, encoded_s2)
+        mv_p, mv_h = self._matcher(encoded_p, encoded_h)
 
         # the "enhancement" layer
-        # Shape: (batch_size, s1_length, encoding_layer_num * encoding_hidden_dim * 4 + num_perspective * num_matching)
-        s1_enhanced = torch.cat(
-                [encoded_s1, attended_s2,
-                 encoded_s1 - attended_s2,
-                 encoded_s1 * attended_s2,
-                 mv_s1],
+        # Shape: (batch_size, p_length, encoding_layer_num * encoding_hidden_dim * 4 + num_perspective * num_matching)
+        enhanced_p = torch.cat(
+                [encoded_p, attended_h,
+                 encoded_p - attended_h,
+                 encoded_p * attended_h,
+                 mv_p],
                 dim=-1
         )
-        # Shape: (batch_size, s2_length, encoding_layer_num * encoding_hidden_dim * 4 + num_perspective * num_matching)
-        s2_enhanced = torch.cat(
-                [encoded_s2, attended_s1,
-                 encoded_s2 - attended_s1,
-                 encoded_s2 * attended_s1,
-                 mv_s2],
+        # Shape: (batch_size, h_length, encoding_layer_num * encoding_hidden_dim * 4 + num_perspective * num_matching)
+        enhanced_h = torch.cat(
+                [encoded_h, attended_p,
+                 encoded_h - attended_p,
+                 encoded_h * attended_p,
+                 mv_h],
                 dim=-1
         )
 
         # The projection layer down to the model dimension.  Dropout is not applied before
         # projection.
         # Shape: (batch_size, seq_length, projection_hidden_dim)
-        projected_enhanced_s1 = self._projection_feedforward(s1_enhanced)
-        projected_enhanced_s2 = self._projection_feedforward(s2_enhanced)
+        projected_enhanced_p = self._projection_feedforward(enhanced_p)
+        projected_enhanced_h = self._projection_feedforward(enhanced_h)
 
         # Run the inference layer
         if self.rnn_input_dropout:
-            projected_enhanced_s1 = self.rnn_input_dropout(projected_enhanced_s1)
-            projected_enhanced_s2 = self.rnn_input_dropout(projected_enhanced_s2)
+            projected_enhanced_p = self.rnn_input_dropout(projected_enhanced_p)
+            projected_enhanced_h = self.rnn_input_dropout(projected_enhanced_h)
         # Shape: (batch_size, seq_length, inference_layer_num * inference_hidden_dim)
-        v_ai = self._inference_encoder(projected_enhanced_s1, s1_mask)
-        v_bi = self._inference_encoder(projected_enhanced_s2, s2_mask)
+        v_ai = self._inference_encoder(projected_enhanced_p, mask_p)
+        v_bi = self._inference_encoder(projected_enhanced_h, mask_h)
 
         # The pooling layer -- max and avg pooling.
         # Shape: (batch_size, inference_layer_num * inference_hidden_dim)
         v_a_max, _ = replace_masked_values(
-                v_ai, s1_mask.unsqueeze(-1), -1e7
+                v_ai, mask_p.unsqueeze(-1), -1e7
         ).max(dim=1)
         v_b_max, _ = replace_masked_values(
-                v_bi, s2_mask.unsqueeze(-1), -1e7
+                v_bi, mask_h.unsqueeze(-1), -1e7
         ).max(dim=1)
 
-        v_a_avg = torch.sum(v_ai * s1_mask.unsqueeze(-1), dim=1) / torch.sum(
-                s1_mask, 1, keepdim=True
+        v_a_avg = torch.sum(v_ai * mask_p.unsqueeze(-1), dim=1) / torch.sum(
+                mask_p, 1, keepdim=True
         )
-        v_b_avg = torch.sum(v_bi * s2_mask.unsqueeze(-1), dim=1) / torch.sum(
-                s2_mask, 1, keepdim=True
+        v_b_avg = torch.sum(v_bi * mask_h.unsqueeze(-1), dim=1) / torch.sum(
+                mask_h, 1, keepdim=True
         )
 
         # Now concat

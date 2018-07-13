@@ -12,5 +12,5 @@ class TestQuoraParaphraseDatasetReader(AllenNlpTestCase):
 
         assert len(instances) == 10
         for x in instances:
-            for f in ["label", "s1", "s2"]:
+            for f in ["label", "premise", "hypothesis"]:
                 assert f in x.fields

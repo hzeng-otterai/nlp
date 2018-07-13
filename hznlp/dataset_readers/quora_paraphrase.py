@@ -9,7 +9,7 @@ from overrides import overrides
 
 from allennlp.common.file_utils import cached_path
 from allennlp.data.dataset_readers.dataset_reader import DatasetReader
-from allennlp.data.fields import LabelField, TextField
+from allennlp.data.fields import LabelField, TextField, Field
 from allennlp.data.instance import Instance
 from allennlp.data.tokenizers import Tokenizer, WordTokenizer
 from allennlp.data.tokenizers.word_splitter import JustSpacesWordSplitter
@@ -37,8 +37,8 @@ class QuoraParaphraseDatasetReader(DatasetReader):
         take longer per batch.  This also allows training with datasets that are too large to fit
         in memory.
     tokenizer : ``Tokenizer``, optional
-        Tokenizer to use to split the title and abstrct into words or other kinds of tokens.
-        Defaults to ``WordTokenizer()``.
+        Tokenizer to use to split the premise and hypothesis into words or other kinds of tokens.
+        Defaults to ``WordTokenizer(JustSpacesWordSplitter())``.
     token_indexers : ``Dict[str, TokenIndexer]``, optional
         Indexers used to define input token representations. Defaults to ``{"tokens":
         SingleIdTokenIndexer()}``.
@@ -60,29 +60,25 @@ class QuoraParaphraseDatasetReader(DatasetReader):
             with open(cached_path(file_path), "r") as data_file:
                 tsvin = csv.reader(data_file, delimiter='\t')
                 for row in tsvin:
-                    if len(row) != 4:
-                        continue
-                    label, s1, s2 = row[0], row[1], row[2]
-                    yield self.text_to_instance(s1, s2, label)
+                    if len(row) == 4:
+                        yield self.text_to_instance(premise=row[1], hypothesis=row[2], label=row[0])
         else:
             with zipfile.ZipFile(cached_path(file_name), 'r') as zip_file:
                 with zip_file.open(member, "r") as member_file:
                     data_file = io.TextIOWrapper(member_file)
                     tsvin = csv.reader(data_file, delimiter='\t')
                     for row in tsvin:
-                        if len(row) != 4:
-                            continue
-                        label, s1, s2 = row[0], row[1], row[2]
-                        yield self.text_to_instance(s1, s2, label)
+                        if len(row) == 4:
+                            yield self.text_to_instance(premise=row[1], hypothesis=row[2], label=row[0])
 
     @overrides
-    def text_to_instance(self, s1: str, s2: str, label: str = None) -> Instance:  # type: ignore
+    def text_to_instance(self, premise: str, hypothesis: str, label: str = None) -> Instance:  # type: ignore
         # pylint: disable=arguments-differ
-        tokenized_s1 = self._tokenizer.tokenize(s1)
-        tokenized_s2 = self._tokenizer.tokenize(s2)
-        s1_field = TextField(tokenized_s1, self._token_indexers)
-        s2_field = TextField(tokenized_s2, self._token_indexers)
-        fields = {'s1': s1_field, 's2': s2_field}
+        fields: Dict[str, Field] = {}
+        tokenized_premise = self._tokenizer.tokenize(premise)
+        tokenized_hypothesis = self._tokenizer.tokenize(hypothesis)
+        fields["premise"] = TextField(tokenized_premise, self._token_indexers)
+        fields["hypothesis"] = TextField(tokenized_hypothesis, self._token_indexers)
         if label is not None:
             fields['label'] = LabelField(label)
 

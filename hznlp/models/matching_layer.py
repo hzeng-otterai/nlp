@@ -106,10 +106,10 @@ class MatchingLayer(nn.Module, FromParams):
         for para in self.params:
             nn.init.kaiming_normal_(para)
         
-    def forward(self, con_p, con_h):
+    def forward(self, context_p, context_h):
         # (batch, seq_len, hidden_dim)
-        con_p_fw, con_p_bw = torch.split(con_p, self.hidden_dim, dim=-1)
-        con_h_fw, con_h_bw = torch.split(con_h, self.hidden_dim, dim=-1)
+        context_p_fw, context_p_bw = torch.split(context_p, self.hidden_dim, dim=-1)
+        context_h_fw, context_h_bw = torch.split(context_h, self.hidden_dim, dim=-1)
         
         mv_p = []
         mv_h = []
@@ -119,10 +119,10 @@ class MatchingLayer(nn.Module, FromParams):
             # (batch, seq_len, hidden_size), (batch, hidden_size)
             # -> (batch, seq_len, num_perspective)
             mv_idx = len(mv_p)
-            mv_p_full_fw = mp_matching_func(con_p_fw, con_h_fw[:, -1, :], self.params[mv_idx])
-            mv_p_full_bw = mp_matching_func(con_p_bw, con_h_bw[:, 0, :], self.params[mv_idx + 1])
-            mv_h_full_fw = mp_matching_func(con_h_fw, con_p_fw[:, -1, :], self.params[mv_idx])
-            mv_h_full_bw = mp_matching_func(con_h_bw, con_p_bw[:, 0, :], self.params[mv_idx + 1])
+            mv_p_full_fw = mp_matching_func(context_p_fw, context_h_fw[:, -1, :], self.params[mv_idx])
+            mv_p_full_bw = mp_matching_func(context_p_bw, context_h_bw[:, 0, :], self.params[mv_idx + 1])
+            mv_h_full_fw = mp_matching_func(context_h_fw, context_p_fw[:, -1, :], self.params[mv_idx])
+            mv_h_full_bw = mp_matching_func(context_h_bw, context_p_bw[:, 0, :], self.params[mv_idx + 1])
             mv_p.extend([mv_p_full_fw, mv_p_full_bw])
             mv_h.extend([mv_h_full_fw, mv_h_full_bw])
 
@@ -130,8 +130,8 @@ class MatchingLayer(nn.Module, FromParams):
         if not self.wo_maxpool_match:
             # (batch, seq_len1, seq_len2, num_perspective)
             mv_idx = len(mv_p)
-            mv_max_fw = mp_matching_func_pairwise(con_p_fw, con_h_fw, self.params[mv_idx])
-            mv_max_bw = mp_matching_func_pairwise(con_p_bw, con_h_bw, self.params[mv_idx + 1])
+            mv_max_fw = mp_matching_func_pairwise(context_p_fw, context_h_fw, self.params[mv_idx])
+            mv_max_bw = mp_matching_func_pairwise(context_p_bw, context_h_bw, self.params[mv_idx + 1])
 
             # (batch, seq_len, num_perspective)
             mv_p_max_fw, _ = mv_max_fw.max(dim=2)
@@ -144,19 +144,19 @@ class MatchingLayer(nn.Module, FromParams):
         # 3. Attentive-Matching
 
         # (batch, seq_len1, seq_len2)
-        att_fw = attention(con_p_fw, con_h_fw)
-        att_bw = attention(con_p_bw, con_h_bw)
+        att_fw = attention(context_p_fw, context_h_fw)
+        att_bw = attention(context_p_bw, context_h_bw)
 
         # (batch, seq_len2, hidden_size) -> (batch, 1, seq_len2, hidden_size)
         # (batch, seq_len1, seq_len2) -> (batch, seq_len1, seq_len2, 1)
         # -> (batch, seq_len1, seq_len2, hidden_size)
-        att_h_fw = con_h_fw.unsqueeze(1) * att_fw.unsqueeze(3)
-        att_h_bw = con_h_bw.unsqueeze(1) * att_bw.unsqueeze(3)
+        att_h_fw = context_h_fw.unsqueeze(1) * att_fw.unsqueeze(3)
+        att_h_bw = context_h_bw.unsqueeze(1) * att_bw.unsqueeze(3)
         # (batch, seq_len1, hidden_size) -> (batch, seq_len1, 1, hidden_size)
         # (batch, seq_len1, seq_len2) -> (batch, seq_len1, seq_len2, 1)
         # -> (batch, seq_len1, seq_len2, hidden_size)
-        att_p_fw = con_p_fw.unsqueeze(2) * att_fw.unsqueeze(3)
-        att_p_bw = con_p_bw.unsqueeze(2) * att_bw.unsqueeze(3)
+        att_p_fw = context_p_fw.unsqueeze(2) * att_fw.unsqueeze(3)
+        att_p_bw = context_p_bw.unsqueeze(2) * att_bw.unsqueeze(3)
         
         if not self.wo_attentive_match:
 
@@ -172,10 +172,10 @@ class MatchingLayer(nn.Module, FromParams):
 
             # (batch, seq_len, num_perspective)
             mv_idx = len(mv_p)
-            mv_p_att_mean_fw = mp_matching_func(con_p_fw, att_mean_h_fw, self.params[mv_idx])
-            mv_p_att_mean_bw = mp_matching_func(con_p_bw, att_mean_h_bw, self.params[mv_idx + 1])
-            mv_h_att_mean_fw = mp_matching_func(con_h_fw, att_mean_p_fw, self.params[mv_idx])
-            mv_h_att_mean_bw = mp_matching_func(con_h_bw, att_mean_p_bw, self.params[mv_idx + 1])
+            mv_p_att_mean_fw = mp_matching_func(context_p_fw, att_mean_h_fw, self.params[mv_idx])
+            mv_p_att_mean_bw = mp_matching_func(context_p_bw, att_mean_h_bw, self.params[mv_idx + 1])
+            mv_h_att_mean_fw = mp_matching_func(context_h_fw, att_mean_p_fw, self.params[mv_idx])
+            mv_h_att_mean_bw = mp_matching_func(context_h_bw, att_mean_p_bw, self.params[mv_idx + 1])
             mv_p.extend([mv_p_att_mean_fw, mv_p_att_mean_bw])
             mv_h.extend([mv_h_att_mean_fw, mv_h_att_mean_bw])
 
@@ -190,10 +190,10 @@ class MatchingLayer(nn.Module, FromParams):
 
             # (batch, seq_len, num_perspective)
             mv_idx = len(mv_p)
-            mv_p_att_max_fw = mp_matching_func(con_p_fw, att_max_h_fw, self.params[mv_idx])
-            mv_p_att_max_bw = mp_matching_func(con_p_bw, att_max_h_bw, self.params[mv_idx + 1])
-            mv_h_att_max_fw = mp_matching_func(con_h_fw, att_max_p_fw, self.params[mv_idx])
-            mv_h_att_max_bw = mp_matching_func(con_h_bw, att_max_p_bw, self.params[mv_idx + 1])
+            mv_p_att_max_fw = mp_matching_func(context_p_fw, att_max_h_fw, self.params[mv_idx])
+            mv_p_att_max_bw = mp_matching_func(context_p_bw, att_max_h_bw, self.params[mv_idx + 1])
+            mv_h_att_max_fw = mp_matching_func(context_h_fw, att_max_p_fw, self.params[mv_idx])
+            mv_h_att_max_bw = mp_matching_func(context_h_bw, att_max_p_bw, self.params[mv_idx + 1])
             
             mv_p.extend([mv_p_att_max_fw, mv_p_att_max_bw])
             mv_h.extend([mv_h_att_max_fw, mv_h_att_max_bw])

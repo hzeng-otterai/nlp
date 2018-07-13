@@ -3,5 +3,5 @@ python -m allennlp.service.server_simple \
     --predictor paraphrasing \
     --include-package hznlp \
     --title "Paraphrasing" \
-    --field-name s1 \
-    --field-name s2
+    --field-name premise \
+    --field-name hypothesis

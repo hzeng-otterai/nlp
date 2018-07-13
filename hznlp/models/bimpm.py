@@ -43,24 +43,24 @@ class BiMPM(Model):
 
     @overrides
     def forward(self,  # type: ignore
-                s1: Dict[str, torch.LongTensor],
-                s2: Dict[str, torch.LongTensor],
+                premise: Dict[str, torch.LongTensor],
+                hypothesis: Dict[str, torch.LongTensor],
                 label: torch.LongTensor = None) -> Dict[str, torch.Tensor]:
  
-        mask_s1 = util.get_text_field_mask(s1)
-        mask_s2 = util.get_text_field_mask(s2)
+        mask_p = util.get_text_field_mask(premise)
+        mask_h = util.get_text_field_mask(hypothesis)
 
-        embedded_s1 = self.text_field_embedder(s1)
-        encoded_s1 = self.encoder(embedded_s1, mask_s1)
+        embedded_p = self.text_field_embedder(premise)
+        encoded_p = self.encoder(embedded_p, mask_p)
 
-        embedded_s2 = self.text_field_embedder(s2)
-        encoded_s2 = self.encoder(embedded_s2, mask_s2)
+        embedded_h = self.text_field_embedder(hypothesis)
+        encoded_h = self.encoder(embedded_h, mask_h)
 
-        mv_s1, mv_s2 = self.matcher(encoded_s1, encoded_s2)
-        agg_s1 = self.aggregator(mv_s1, mask_s1)
-        agg_s2 = self.aggregator(mv_s2, mask_s2)
+        mv_p, mv_h = self.matcher(encoded_p, encoded_h)
+        agg_p = self.aggregator(mv_p, mask_p)
+        agg_h = self.aggregator(mv_h, mask_h)
 
-        logits = self.classifier_feedforward(torch.cat([agg_s1, agg_s2], dim=-1))
+        logits = self.classifier_feedforward(torch.cat([agg_p, agg_h], dim=-1))
 
         output_dict = {'logits': logits}
         if label is not None:

@@ -10,7 +10,6 @@ from allennlp.modules.similarity_functions import SimilarityFunction
 from allennlp.models.model import Model
 from allennlp.nn import InitializerApplicator, RegularizerApplicator
 from allennlp.nn import util
-from allennlp.nn import Activation
 from allennlp.training.metrics import BooleanAccuracy
 
 from hznlp.models.matching_layer import MatchingLayer
@@ -47,32 +46,32 @@ class BiMPMCosine(Model):
 
     @overrides
     def forward(self,  # type: ignore
-                s1: Dict[str, torch.LongTensor],
-                s2: Dict[str, torch.LongTensor],
+                premise: Dict[str, torch.LongTensor],
+                hypothesis: Dict[str, torch.LongTensor],
                 label: torch.LongTensor = None) -> Dict[str, torch.Tensor]:
  
-        mask_s1 = util.get_text_field_mask(s1)
-        mask_s2 = util.get_text_field_mask(s2)
+        mask_p = util.get_text_field_mask(premise)
+        mask_h = util.get_text_field_mask(hypothesis)
 
-        embedded_s1 = self.text_field_embedder(s1)
-        embedded_s1 = F.dropout(embedded_s1, p=0.1, training=self.training)
-        encoded_s1 = self.encoder(embedded_s1, mask_s1)
-        encoded_s1 = F.dropout(encoded_s1, p=0.1, training=self.training)
+        embedded_p = self.text_field_embedder(premise)
+        embedded_p = F.dropout(embedded_p, p=0.1, training=self.training)
+        encoded_p = self.encoder(embedded_p, mask_p)
+        encoded_p = F.dropout(encoded_p, p=0.1, training=self.training)
 
-        embedded_s2 = self.text_field_embedder(s2)
-        embedded_s2 = F.dropout(embedded_s2, p=0.1, training=self.training)
-        encoded_s2 = self.encoder(embedded_s2, mask_s2)
-        encoded_s2 = F.dropout(encoded_s2, p=0.1, training=self.training)
+        embedded_h = self.text_field_embedder(hypothesis)
+        embedded_h = F.dropout(embedded_h, p=0.1, training=self.training)
+        encoded_h = self.encoder(embedded_h, mask_h)
+        encoded_h = F.dropout(encoded_h, p=0.1, training=self.training)
 
-        mv_s1, mv_s2 = self.matcher(encoded_s1, encoded_s2)
-        agg_s1 = self.aggregator(mv_s1, mask_s1)
-        agg_s1 = F.dropout(agg_s1, p=0.1, training=self.training)
-        agg_s2 = self.aggregator(mv_s2, mask_s2)
-        agg_s2 = F.dropout(agg_s2, p=0.1, training=self.training)
+        mv_p, mv_h = self.matcher(encoded_p, encoded_h)
+        agg_p = self.aggregator(mv_p, mask_p)
+        agg_p = F.dropout(agg_p, p=0.1, training=self.training)
+        agg_h = self.aggregator(mv_h, mask_h)
+        agg_h = F.dropout(agg_h, p=0.1, training=self.training)
 
-        fc_s1, fc_s2 = self.feedforward(agg_s1, agg_s2)
+        fc_p, fc_h = self.feedforward(agg_p, agg_h)
 
-        similarity = self.similarity(fc_s1, fc_s2)
+        similarity = self.similarity(fc_p, fc_h)
 
         prob = (similarity + 1) * 0.5
         prob = torch.clamp(prob, min=0.0, max=1.0)
