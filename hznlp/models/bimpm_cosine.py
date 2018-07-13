@@ -14,6 +14,7 @@ from allennlp.nn import Activation
 from allennlp.training.metrics import BooleanAccuracy
 
 from hznlp.models.matching_layer import MatchingLayer
+from hznlp.models.feedforward_pair import FeedForwardPair
 
 
 @Model.register("bimpm_cosine")
@@ -23,9 +24,7 @@ class BiMPMCosine(Model):
                  encoder: Seq2SeqEncoder,
                  matcher: MatchingLayer,
                  aggregator: Seq2VecEncoder,
-                 feedforward_straight: FeedForward,
-                 feedforward_cross: FeedForward,
-                 feedforward_activation: Activation,
+                 feedforward: FeedForwardPair,
                  similarity: SimilarityFunction,
                  initializer: InitializerApplicator = InitializerApplicator(),
                  regularizer: Optional[RegularizerApplicator] = None) -> None:
@@ -36,9 +35,7 @@ class BiMPMCosine(Model):
         self.encoder = encoder
         self.matcher = matcher
         self.aggregator = aggregator
-        self.feedforward_straight = feedforward_straight
-        self.feedforward_cross = feedforward_cross
-        self.feedforward_activation = feedforward_activation
+        self.feedforward = feedforward
         self.similarity = similarity
 
         self.metrics = {
@@ -73,10 +70,7 @@ class BiMPMCosine(Model):
         agg_s2 = self.aggregator(mv_s2, mask_s2)
         agg_s2 = F.dropout(agg_s2, p=0.1, training=self.training)
 
-        fc_s1 = self.feedforward_activation(self.feedforward_straight(agg_s1) + self.feedforward_cross(agg_s2))
-        fc_s1 = F.dropout(fc_s1, p=0.1, training=self.training)
-        fc_s2 = self.feedforward_activation(self.feedforward_straight(agg_s2) + self.feedforward_cross(agg_s1))
-        fc_s2 = F.dropout(fc_s2, p=0.1, training=self.training)
+        fc_s1, fc_s2 = self.feedforward(agg_s1, agg_s2)
 
         similarity = self.similarity(fc_s1, fc_s2)
 

@@ -1,2 +1,4 @@
 {"s1": "Hello !", "s2": "How are you ?"}
 {"s1": "Who is the author of Harry Potter ?", "s2": "Who wrote the book Harry Potter ?"}
+{"s1": "Can we donate blood after getting flu ?", "s2": "Can we donate blood after getting flu ?"}
+{"s1": "1", "s2": "2"}

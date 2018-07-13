@@ -1,5 +1,3 @@
-from allennlp.common import Params
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -212,6 +210,7 @@ class MatchingLayer(nn.Module, FromParams):
 
 
 if __name__ == "__main__":
+    from allennlp.common import Params
     torch.manual_seed(999)
 
     batch = 16
