@@ -63,7 +63,7 @@ class BiMPMCosine(Model):
         encoded_h = self.encoder(embedded_h, mask_h)
         encoded_h = F.dropout(encoded_h, p=0.1, training=self.training)
 
-        mv_p, mv_h = self.matcher(encoded_p, encoded_h)
+        mv_p, mv_h = self.matcher(encoded_p, mask_p, encoded_h, mask_h)
         agg_p = self.aggregator(mv_p, mask_p)
         agg_p = F.dropout(agg_p, p=0.1, training=self.training)
         agg_h = self.aggregator(mv_h, mask_h)

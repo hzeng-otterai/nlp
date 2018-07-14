@@ -1,7 +1,9 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
 from allennlp.common.registrable import FromParams
+from allennlp.nn.util import get_lengths_from_binary_sequence_mask
 
 def mp_matching_func(v1, v2, w):
     """
@@ -76,7 +78,7 @@ def attention(v1, v2):
 
 def div_with_small_value(n, d, eps=1e-8):
     # too small values are replaced by 1e-8 to prevent it from exploding.
-    d = d * (d > eps).float() + eps * (d <= eps).float()
+    d = torch.clamp(d, min=eps)
     return n / d
 
 
@@ -106,11 +108,22 @@ class MatchingLayer(nn.Module, FromParams):
         for para in self.params:
             nn.init.kaiming_normal_(para)
         
-    def forward(self, context_p, context_h):
+    def forward(self, context_p, mask_p, context_h, mask_h):
         # (batch, seq_len, hidden_dim)
+        assert context_p.size(-1) == context_h.size(-1) == self.hidden_dim * 2
+
         context_p_fw, context_p_bw = torch.split(context_p, self.hidden_dim, dim=-1)
         context_h_fw, context_h_bw = torch.split(context_h, self.hidden_dim, dim=-1)
-        
+
+        # (batch,)
+        len_p = get_lengths_from_binary_sequence_mask(mask_p)
+        len_h = get_lengths_from_binary_sequence_mask(mask_h)
+
+        # (batch, 1, hidden_dim)
+        # TODO: deal with length == 0?
+        last_index_p = (len_p-1).view(-1, 1, 1).expand(-1, 1, self.hidden_dim)
+        last_index_h = (len_h-1).view(-1, 1, 1).expand(-1, 1, self.hidden_dim)
+
         mv_p = []
         mv_h = []
 
@@ -119,9 +132,9 @@ class MatchingLayer(nn.Module, FromParams):
             # (batch, seq_len, hidden_size), (batch, hidden_size)
             # -> (batch, seq_len, num_perspective)
             mv_idx = len(mv_p)
-            mv_p_full_fw = mp_matching_func(context_p_fw, context_h_fw[:, -1, :], self.params[mv_idx])
+            mv_p_full_fw = mp_matching_func(context_p_fw, context_h_fw.gather(1, last_index_h), self.params[mv_idx])
             mv_p_full_bw = mp_matching_func(context_p_bw, context_h_bw[:, 0, :], self.params[mv_idx + 1])
-            mv_h_full_fw = mp_matching_func(context_h_fw, context_p_fw[:, -1, :], self.params[mv_idx])
+            mv_h_full_fw = mp_matching_func(context_h_fw, context_p_fw.gather(1, last_index_p), self.params[mv_idx])
             mv_h_full_bw = mp_matching_func(context_h_bw, context_p_bw[:, 0, :], self.params[mv_idx + 1])
             mv_p.extend([mv_p_full_fw, mv_p_full_bw])
             mv_h.extend([mv_h_full_fw, mv_h_full_bw])

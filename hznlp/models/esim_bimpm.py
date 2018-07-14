@@ -94,7 +94,7 @@ class ESIMBiMPM(Model):
 
         # Using BiMPM to calculate matching vectors
         # Shape: (batch_size, seq_length, num_perspective * num_matching)
-        mv_p, mv_h = self._matcher(encoded_p, encoded_h)
+        mv_p, mv_h = self._matcher(encoded_p, mask_p, encoded_h, mask_h)
 
         # the "enhancement" layer
         # Shape: (batch_size, p_length, encoding_layer_num * encoding_hidden_dim * 4 + num_perspective * num_matching)
