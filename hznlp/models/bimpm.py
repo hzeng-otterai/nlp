@@ -34,8 +34,9 @@ class BiMPM(Model):
         self.aggregator = aggregator
         self.classifier_feedforward = classifier_feedforward
 
-        self.accuracy_metric = CategoricalAccuracy()
-        self.f1_metric = F1Measure(positive_label=1)
+        self.metrics = {
+            "accuracy": CategoricalAccuracy()
+        }
 
         self.loss = torch.nn.CrossEntropyLoss()
 
@@ -65,8 +66,8 @@ class BiMPM(Model):
         output_dict = {'logits': logits}
         if label is not None:
             loss = self.loss(logits, label.squeeze(-1))
-            self.accuracy_metric(logits, label.squeeze(-1))
-            self.f1_metric(logits, label.squeeze(-1))
+            for metric in self.metrics.values():
+                metric(logits, label.squeeze(-1))
             output_dict["loss"] = loss
 
         return output_dict
@@ -89,7 +90,5 @@ class BiMPM(Model):
 
     @overrides
     def get_metrics(self, reset: bool = False) -> Dict[str, float]:
-        accuracy = self.accuracy_metric.get_metric(reset)
-        precision, recall, f1 = self.f1_metric.get_metric(reset)
-        return {"accuracy": accuracy, "precision": precision, "recall": recall, "f1": f1}
+        return {metric_name: metric.get_metric(reset) for metric_name, metric in self.metrics.items()}
 

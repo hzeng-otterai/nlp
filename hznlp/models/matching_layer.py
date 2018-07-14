@@ -86,7 +86,6 @@ class MatchingLayer(nn.Module, FromParams):
     def __init__(self,
                  hidden_dim: int = 100,
                  num_perspective: int = 20,
-                 dropout: float = 0.1,
                  wo_full_match: bool = False,
                  wo_maxpool_match: bool = False,
                  wo_attentive_match: bool = False,
@@ -95,7 +94,6 @@ class MatchingLayer(nn.Module, FromParams):
         
         self.hidden_dim = hidden_dim
         self.num_perspective = num_perspective
-        self.dropout = dropout
         self.wo_full_match = wo_full_match
         self.wo_maxpool_match = wo_maxpool_match
         self.wo_attentive_match = wo_attentive_match
@@ -216,9 +214,6 @@ class MatchingLayer(nn.Module, FromParams):
         mv_p = torch.cat(mv_p, dim=2)
         mv_h = torch.cat(mv_h, dim=2)
 
-        mv_p = F.dropout(mv_p, p=self.dropout, training=self.training)
-        mv_h = F.dropout(mv_h, p=self.dropout, training=self.training)
-        
         return mv_p, mv_h
 
 
