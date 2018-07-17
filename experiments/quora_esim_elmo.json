@@ -18,7 +18,7 @@
   "validation_data_path": "(https://s3-us-west-1.amazonaws.com/handsomezebra/public/Quora_question_pair_partition.zip)#Quora_question_pair_partition/dev.tsv",
   "model": {
     "type": "esim",
-    "dropout": 0.5,
+    "dropout": 0.4,
     "text_field_embedder": {
       "elmo":{
         "type": "elmo_token_embedder",
@@ -54,7 +54,7 @@
       "num_layers": 1,
       "hidden_dims": 300,
       "activations": "relu",
-      "dropout": 0.5
+      "dropout": 0.4
     },
     "output_logit": {
       "input_dim": 300,

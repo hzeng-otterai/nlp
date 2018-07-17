@@ -75,7 +75,7 @@ class ESIMBiMPM(Model):
             embedded_h = self.rnn_input_dropout(embedded_h)
 
         # encode p and h
-        # Shape: (batch_size, seq_length, encoding_layer_num * encoding_hidden_dim)
+        # Shape: (batch_size, seq_length, encoding_direction_num * encoding_hidden_dim)
         encoded_p = self._encoder(embedded_p, mask_p)
         encoded_h = self._encoder(embedded_h, mask_h)
 
@@ -84,12 +84,12 @@ class ESIMBiMPM(Model):
 
         # Shape: (batch_size, p_length, h_length)
         p2h_attention = last_dim_softmax(similarity_matrix, mask_h)
-        # Shape: (batch_size, p_length, encoding_layer_num * encoding_hidden_dim)
+        # Shape: (batch_size, p_length, encoding_direction_num * encoding_hidden_dim)
         attended_h = weighted_sum(encoded_h, p2h_attention)
 
         # Shape: (batch_size, h_length, p_length)
         h2p_attention = last_dim_softmax(similarity_matrix.transpose(1, 2).contiguous(), mask_p)
-        # Shape: (batch_size, h_length, encoding_layer_num * encoding_hidden_dim)
+        # Shape: (batch_size, h_length, encoding_direction_num * encoding_hidden_dim)
         attended_p = weighted_sum(encoded_p, h2p_attention)
 
         # Using BiMPM to calculate matching vectors
@@ -97,7 +97,7 @@ class ESIMBiMPM(Model):
         mv_p, mv_h = self._matcher(encoded_p, mask_p, encoded_h, mask_h)
 
         # the "enhancement" layer
-        # Shape: (batch_size, p_length, encoding_layer_num * encoding_hidden_dim * 4 + num_perspective * num_matching)
+        # Shape: (batch_size, p_length, encoding_direction_num * encoding_hidden_dim * 4 + num_perspective * num_matching)
         enhanced_p = torch.cat(
                 [encoded_p, attended_h,
                  encoded_p - attended_h,
@@ -105,7 +105,7 @@ class ESIMBiMPM(Model):
                  mv_p],
                 dim=-1
         )
-        # Shape: (batch_size, h_length, encoding_layer_num * encoding_hidden_dim * 4 + num_perspective * num_matching)
+        # Shape: (batch_size, h_length, encoding_direction_num * encoding_hidden_dim * 4 + num_perspective * num_matching)
         enhanced_h = torch.cat(
                 [encoded_h, attended_p,
                  encoded_h - attended_p,
@@ -124,12 +124,13 @@ class ESIMBiMPM(Model):
         if self.rnn_input_dropout:
             projected_enhanced_p = self.rnn_input_dropout(projected_enhanced_p)
             projected_enhanced_h = self.rnn_input_dropout(projected_enhanced_h)
-        # Shape: (batch_size, seq_length, inference_layer_num * inference_hidden_dim)
+            
+        # Shape: (batch_size, seq_length, inference_direction_num * inference_hidden_dim)
         v_ai = self._inference_encoder(projected_enhanced_p, mask_p)
         v_bi = self._inference_encoder(projected_enhanced_h, mask_h)
 
         # The pooling layer -- max and avg pooling.
-        # Shape: (batch_size, inference_layer_num * inference_hidden_dim)
+        # Shape: (batch_size, inference_direction_num * inference_hidden_dim)
         v_a_max, _ = replace_masked_values(
                 v_ai, mask_p.unsqueeze(-1), -1e7
         ).max(dim=1)
@@ -145,7 +146,7 @@ class ESIMBiMPM(Model):
         )
 
         # Now concat
-        # Shape: (batch_size, inference_layer_num * inference_hidden_dim * 4)
+        # Shape: (batch_size, inference_direction_num * inference_hidden_dim * 4)
         v_all = torch.cat([v_a_avg, v_a_max, v_b_avg, v_b_max], dim=1)
 
         # the final MLP -- apply dropout to input, and MLP applies to output & hidden
