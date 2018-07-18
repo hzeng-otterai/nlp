@@ -59,7 +59,7 @@ class CosineContrastiveLoss(torch.nn.Module):
         cos_sim = F.cosine_similarity(x0, x1)
 
         l1 = y.float() * torch.pow((1.0-cos_sim), 2) / 4.0
-        l2 = (1 - y).float() * torch.pow(cos_sim * torch.lt(cos_sim, self.margin).float(), 2)
+        l2 = (1 - y).float() * torch.pow(cos_sim * torch.gt(cos_sim, self.margin).float(), 2)
         loss = torch.mean(l1 + l2)
         return loss
 
@@ -67,10 +67,9 @@ class CosineContrastiveLoss(torch.nn.Module):
 if __name__ == "__main__":
     torch.manual_seed(999)
 
-    test_input_1 = torch.FloatTensor([[0.6, 0.5, 1.5], [1.2, 1.3, -1.2]])
-    test_input_2 = torch.FloatTensor([[-0.5, -0.6, 0.2], [1.21, 1.29, -1.2]])
-    label = torch.LongTensor([1, 0])
-
+    test_input_1 = torch.FloatTensor([[0.6, 0.5, 1.5], [0.6, 0.5, 1.5], [1.2, 1.3, -1.2], [1.2, 1.3, -1.2]])
+    test_input_2 = torch.FloatTensor([[-0.5, -0.6, 0.2], [-0.5, -0.6, 0.2], [1.21, 1.29, -1.2], [1.2, 1.3, -1.2]])
+    label = torch.LongTensor([1, 0, 1, 0])
 
     loss_func = ContrastiveLoss()
 

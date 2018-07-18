@@ -43,19 +43,19 @@
     },
     "feedforward": {
       "input_dim": 200,
-      "hidden_dim": 100,
-      "activation": "tanh",
-      "dropout": 0.1
+      "num_layers": 1,
+      "hidden_dims": [100],
+      "activations": ["linear"],
+      "dropout": [0.0]
     },
-    "similarity": {
-      "type": "cosine"
-    },
+    "margin": 0.4,
     "initializer": [
-        [".*linear_layers.*weight", {"type": "xavier_normal"}],
-        [".*linear_layers.*bias", {"type": "constant", "val": 0}],
-        [".*weight_ih.*", {"type": "xavier_normal"}],
-        [".*weight_hh.*", {"type": "orthogonal"}],
-        [".*bias.*", {"type": "constant", "val": 0}]
+      [".*feedforward.*weight", {"type": "xavier_normal"}],
+      [".*feedforward.*bias", {"type": "zero"}],
+      [".*weight_ih.*", {"type": "xavier_normal"}],
+      [".*weight_hh.*", {"type": "orthogonal"}],
+      [".*bias_ih.*", {"type": "zero"}],
+      [".*bias_hh.*", {"type": "lstm_hidden_bias"}]
     ]
   },
   "iterator": {

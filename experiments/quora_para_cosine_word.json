@@ -7,71 +7,43 @@
       "word_splitter": {
         "type": "just_spaces"
       }
-    },
-    "token_indexers": {
-      "tokens": {
-        "type": "single_id",
-        "lowercase_tokens": false
-      },
-      "elmo": {
-        "type": "elmo_characters"
-      }
     }
   },
   "train_data_path": "(https://s3-us-west-1.amazonaws.com/handsomezebra/public/Quora_question_pair_partition.zip)#Quora_question_pair_partition/train.tsv",
   "validation_data_path": "(https://s3-us-west-1.amazonaws.com/handsomezebra/public/Quora_question_pair_partition.zip)#Quora_question_pair_partition/dev.tsv",
   "model": {
-    "type": "bimpm_cosine",
+    "type": "para_cosine",
     "text_field_embedder": {
       "tokens": {
         "type": "embedding",
         "pretrained_file": "https://s3-us-west-2.amazonaws.com/allennlp/datasets/glove/glove.840B.300d.txt.gz",
         "embedding_dim": 300,
         "trainable": false
-      },
-      "elmo": {
-        "type": "elmo_token_embedder",
-        "dropout": 0.2,
-        "options_file": "https://s3-us-west-2.amazonaws.com/allennlp/models/elmo/2x4096_512_2048cnn_2xhighway/elmo_2x4096_512_2048cnn_2xhighway_options.json",
-        "weight_file": "https://s3-us-west-2.amazonaws.com/allennlp/models/elmo/2x4096_512_2048cnn_2xhighway/elmo_2x4096_512_2048cnn_2xhighway_weights.hdf5",
-        "do_layer_norm": false
       }
     },
     "encoder": {
       "type": "lstm",
       "bidirectional": true,
-      "input_size": 1324,
-      "hidden_size": 100,
-      "num_layers": 2,
-      "dropout": 0.1
-    },
-    "matcher": {
-      "hidden_dim": 100,
-      "num_perspective": 20
-    },
-    "aggregator":{
-      "type": "lstm",
-      "bidirectional": true,
-      "input_size": 160,
+      "input_size": 300,
       "hidden_size": 100,
       "num_layers": 2,
       "dropout": 0.1
     },
     "feedforward": {
       "input_dim": 200,
-      "hidden_dim": 100,
-      "activation": "tanh",
-      "dropout": 0.1
+      "num_layers": 1,
+      "hidden_dims": [100],
+      "activations": ["tanh"],
+      "dropout": [0.0]
     },
-    "similarity": {
-      "type": "cosine"
-    },
+    "margin": 0.4,
     "initializer": [
-        [".*linear_layers.*weight", {"type": "xavier_normal"}],
-        [".*linear_layers.*bias", {"type": "constant", "val": 0}],
-        [".*weight_ih.*", {"type": "xavier_normal"}],
-        [".*weight_hh.*", {"type": "orthogonal"}],
-        [".*bias.*", {"type": "constant", "val": 0}]
+      [".*feedforward.*weight", {"type": "xavier_normal"}],
+      [".*feedforward.*bias", {"type": "zero"}],
+      [".*weight_ih.*", {"type": "xavier_normal"}],
+      [".*weight_hh.*", {"type": "orthogonal"}],
+      [".*bias_ih.*", {"type": "zero"}],
+      [".*bias_hh.*", {"type": "lstm_hidden_bias"}]
     ]
   },
   "iterator": {

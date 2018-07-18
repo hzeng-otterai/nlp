@@ -5,41 +5,34 @@ import torch
 import torch.nn.functional as F
 
 from allennlp.data import Vocabulary
-from allennlp.modules import FeedForward, Seq2SeqEncoder, Seq2VecEncoder, TextFieldEmbedder
+from allennlp.modules import Seq2VecEncoder, TextFieldEmbedder
 from allennlp.models.model import Model
 from allennlp.nn import InitializerApplicator, RegularizerApplicator
 from allennlp.nn import util
 from allennlp.training.metrics import BooleanAccuracy
 
-from hznlp.models.matching_layer import MatchingLayer
 from hznlp.models.feedforward_pair import FeedForwardPair
 
 
-@Model.register("bimpm_cosine")
-class BiMPMCosine(Model):
+@Model.register("para_cosine")
+class ParaCosine(Model):
     def __init__(self, vocab: Vocabulary,
                  text_field_embedder: TextFieldEmbedder,
-                 encoder: Seq2SeqEncoder,
-                 matcher: MatchingLayer,
-                 aggregator: Seq2VecEncoder,
+                 encoder: Seq2VecEncoder,
                  feedforward: FeedForwardPair,
                  margin: float = 0.4,
                  initializer: InitializerApplicator = InitializerApplicator(),
                  regularizer: Optional[RegularizerApplicator] = None) -> None:
-        super(BiMPMCosine, self).__init__(vocab, regularizer)
+        super(ParaCosine, self).__init__(vocab, regularizer)
 
         self.text_field_embedder = text_field_embedder
         self.encoder = encoder
-        self.matcher = matcher
-        self.aggregator = aggregator
         self.feedforward = feedforward
         self.margin = margin
 
         self.metrics = {
             "accuracy": BooleanAccuracy()
         }
-
-        self.loss = torch.nn.MSELoss()
 
         initializer(self)
 
@@ -48,7 +41,7 @@ class BiMPMCosine(Model):
                 premise: Dict[str, torch.LongTensor],
                 hypothesis: Dict[str, torch.LongTensor],
                 label: torch.LongTensor = None) -> Dict[str, torch.Tensor]:
- 
+
         mask_p = util.get_text_field_mask(premise)
         mask_h = util.get_text_field_mask(hypothesis)
 
@@ -58,11 +51,7 @@ class BiMPMCosine(Model):
         embedded_h = self.text_field_embedder(hypothesis)
         encoded_h = self.encoder(embedded_h, mask_h)
 
-        mv_p, mv_h = self.matcher(encoded_p, mask_p, encoded_h, mask_h)
-        agg_p = self.aggregator(mv_p, mask_p)
-        agg_h = self.aggregator(mv_h, mask_h)
-
-        fc_p, fc_h = self.feedforward(agg_p, agg_h)
+        fc_p, fc_h = self.feedforward(encoded_p, encoded_h)
 
         cos_sim = F.cosine_similarity(fc_p, fc_h)
 
@@ -70,12 +59,17 @@ class BiMPMCosine(Model):
         output_dict = {'similarity': cos_sim, "prediction": prediction}
 
         if label is not None:
-            new_label = label * 2 - 1
-            loss = self.loss(cos_sim, new_label.float())
+            """
+            Cosine contrastive loss function.
+            Based on: http://anthology.aclweb.org/W16-1617
+            """
+            y = label.float()
+            l1 = y * torch.pow((1.0 - cos_sim), 2) / 4.0
+            l2 = (1 - y) * torch.pow(cos_sim * prediction.float(), 2)
 
+            loss = torch.mean(l1 + l2)
             for metric in self.metrics.values():
                 metric(prediction, label.byte())
-                
             output_dict["loss"] = loss
 
         return output_dict
@@ -94,4 +88,5 @@ class BiMPMCosine(Model):
     @overrides
     def get_metrics(self, reset: bool = False) -> Dict[str, float]:
         return {metric_name: metric.get_metric(reset) for metric_name, metric in self.metrics.items()}
+
 
