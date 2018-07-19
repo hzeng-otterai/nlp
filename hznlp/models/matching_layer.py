@@ -5,12 +5,16 @@ import torch.nn.functional as F
 from allennlp.common.registrable import FromParams
 from allennlp.nn.util import get_lengths_from_binary_sequence_mask
 
+
 def mpm(v1, v2, w):
     """
+    Calculate multi-perspective cosine matching between time-steps of vectors
+    of the same length.
+
     :param v1: (batch, seq_len, hidden_size)
     :param v2: (batch, seq_len, hidden_size)
     :param w: (num_perspective, hidden_size)
-    :return: (batch, num_perspective)
+    :return: (batch, seq_len, num_perspective)
     """
     batch_size, seq_len, hidden_size = v1.shape
     num_perspective = w.size(0)
@@ -31,6 +35,9 @@ def mpm(v1, v2, w):
 
 def mpm_single(v1, v2, w):
     """
+    Calculate multi-perspective cosine matching between time steps of vectors
+    and a single vector.
+
     :param v1: (batch, seq_len, hidden_size)
     :param v2: (batch, hidden_size)
     :param w: (num_perspective, hidden_size)
@@ -46,6 +53,9 @@ def mpm_single(v1, v2, w):
 
 def mpm_pairwise(v1, v2, w):
     """
+    Calculate multi-perspective cosine matching between each time step of
+    one vector and each time step of another vector.
+
     :param v1: (batch, seq_len1, hidden_size)
     :param v2: (batch, seq_len2, hidden_size)
     :param w: (num_perspective, hidden_size)
@@ -77,6 +87,9 @@ def mpm_pairwise(v1, v2, w):
 
 def cosine_pairwise(v1, v2):
     """
+    Calculate cosine similarity between each time step of
+    one vector and each time step of another vector.
+
     :param v1: (batch, seq_len1, hidden_size)
     :param v2: (batch, seq_len2, hidden_size)
     :return: (batch, seq_len1, seq_len2)
@@ -113,21 +126,23 @@ class MatchingLayer(nn.Module, FromParams):
                  wo_attentive_match: bool = False,
                  wo_max_attentive_match: bool = False) -> None:
         super(MatchingLayer, self).__init__()
-        
+
         self.hidden_dim = hidden_dim
         self.num_perspective = num_perspective
         self.wo_full_match = wo_full_match
         self.wo_maxpool_match = wo_maxpool_match
         self.wo_attentive_match = wo_attentive_match
         self.wo_max_attentive_match = wo_max_attentive_match
-        self.num_matching = 8 - 2 * (int(wo_full_match) + int(wo_maxpool_match) + int(wo_attentive_match) + int(wo_max_attentive_match))
+        self.num_matching = 8 - 2 * (
+                    int(wo_full_match) + int(wo_maxpool_match) + int(wo_attentive_match) + int(wo_max_attentive_match))
         assert self.num_matching > 0
 
-        self.params = nn.ParameterList([nn.Parameter(torch.rand(num_perspective, hidden_dim)) for i in range(self.num_matching)])
-        
+        self.params = nn.ParameterList(
+            [nn.Parameter(torch.rand(num_perspective, hidden_dim)) for i in range(self.num_matching)])
+
         for para in self.params:
             nn.init.kaiming_normal_(para)
-        
+
     def forward(self, context_p, mask_p, context_h, mask_h):
         """
         Given the representations of two sentences from BiLSTM, apply four bilateral
@@ -167,8 +182,10 @@ class MatchingLayer(nn.Module, FromParams):
         mv_p, mv_h = [], []
 
         # 1. Full-Matching
+        # Each time step of forward (or backward) contextual embedding of one sentence
+        # is compared with the last time step of the forward (or backward)
+        # contextual embedding of the other sentence
         if not self.wo_full_match:
-
             mv_idx = len(mv_p)
 
             # (batch, hidden_size)
@@ -187,6 +204,10 @@ class MatchingLayer(nn.Module, FromParams):
             mv_h.extend([mv_h_full_fw, mv_h_full_bw])
 
         # 2. Maxpooling-Matching
+        # Each time step of forward (or backward) contextual embedding of one sentence
+        # is compared with every time step of the forward (or backward)
+        # contextual embedding of the other sentence, and only the max value of each
+        # dimension is retained.
         if not self.wo_maxpool_match:
             # (batch, seq_len1, seq_len2, num_perspective)
             mv_idx = len(mv_p)
@@ -202,6 +223,15 @@ class MatchingLayer(nn.Module, FromParams):
             mv_h.extend([mv_h_max_fw, mv_h_max_bw])
 
         # 3. Attentive-Matching
+        # First calculate the cosine similarities between each forward
+        # (or backward) contextual embedding and every forward (or backward)
+        # contextual embedding of the other sentence.
+        # Then each forward (or backward) similarity is taken as the weight
+        # of the forward (or backward) contextual embedding, and calculate an
+        # attentive vector for the sentence by weighted summing all its
+        # contextual embeddings.
+        # Finally match each forward (or backward) contextual embedding
+        # with its corresponding attentive vector.
 
         # (batch, seq_len1, seq_len2)
         cosine_fw = cosine_pairwise(context_p_fw, context_h_fw)
@@ -217,15 +247,14 @@ class MatchingLayer(nn.Module, FromParams):
         # -> (batch, seq_len1, seq_len2, hidden_size)
         att_p_fw = context_p_fw.unsqueeze(2) * cosine_fw.unsqueeze(3)
         att_p_bw = context_p_bw.unsqueeze(2) * cosine_bw.unsqueeze(3)
-        
-        if not self.wo_attentive_match:
 
-            # (batch, seq_len1, hidden_size) / (batch, seq_len1, 1) -> 
+        if not self.wo_attentive_match:
+            # (batch, seq_len1, hidden_size) / (batch, seq_len1, 1) ->
             # (batch, seq_len1, hidden_size)
             att_mean_h_fw = div_safe(att_h_fw.sum(dim=2), cosine_fw.sum(dim=2, keepdim=True))
             att_mean_h_bw = div_safe(att_h_bw.sum(dim=2), cosine_bw.sum(dim=2, keepdim=True))
 
-            # (batch, seq_len2, hidden_size) / (batch, seq_len2, 1) -> 
+            # (batch, seq_len2, hidden_size) / (batch, seq_len2, 1) ->
             # (batch, seq_len2, hidden_size)
             att_mean_p_fw = div_safe(att_p_fw.sum(dim=1), cosine_fw.sum(dim=1, keepdim=True).permute(0, 2, 1))
             att_mean_p_bw = div_safe(att_p_bw.sum(dim=1), cosine_bw.sum(dim=1, keepdim=True).permute(0, 2, 1))
@@ -240,6 +269,9 @@ class MatchingLayer(nn.Module, FromParams):
             mv_h.extend([mv_h_att_mean_fw, mv_h_att_mean_bw])
 
         # 4. Max-Attentive-Matching
+        # Pick the contextual embeddings with the highest cosine similarity as the attentive
+        # vector, and match each forward (or backward) contextual embedding with its
+        # corresponding attentive vector.
         if not self.wo_max_attentive_match:
             # (batch, seq_len1, hidden_size)
             att_max_h_fw, _ = att_h_fw.max(dim=2)
@@ -254,7 +286,7 @@ class MatchingLayer(nn.Module, FromParams):
             mv_p_att_max_bw = mpm(context_p_bw, att_max_h_bw, self.params[mv_idx + 1])
             mv_h_att_max_fw = mpm(context_h_fw, att_max_p_fw, self.params[mv_idx])
             mv_h_att_max_bw = mpm(context_h_bw, att_max_p_bw, self.params[mv_idx + 1])
-            
+
             mv_p.extend([mv_p_att_max_fw, mv_p_att_max_bw])
             mv_h.extend([mv_h_att_max_fw, mv_h_att_max_bw])
 
@@ -268,7 +300,6 @@ class MatchingLayer(nn.Module, FromParams):
 
 if __name__ == "__main__":
 
-
     from allennlp.common import Params
 
     torch.set_printoptions(linewidth=150, edgeitems=3)
@@ -276,8 +307,8 @@ if __name__ == "__main__":
 
     batch = 16
     len1, len2 = 21, 24
-    seq_len1 = torch.randint(low=len1-10, high=len1+1, size=(batch,)).long()
-    seq_len2 = torch.randint(low=len2-10, high=len2+1, size=(batch,)).long()
+    seq_len1 = torch.randint(low=len1 - 10, high=len1 + 1, size=(batch,)).long()
+    seq_len2 = torch.randint(low=len2 - 10, high=len2 + 1, size=(batch,)).long()
 
     mask1 = []
     for l in seq_len1:
@@ -299,8 +330,8 @@ if __name__ == "__main__":
 
     vecs_p, vecs_h = ml(test1, mask1, test2, mask2)
 
-    assert vecs_p.size() == torch.Size([batch, len1, 8*l])
-    assert vecs_h.size() == torch.Size([batch, len2, 8*l])
+    assert vecs_p.size() == torch.Size([batch, len1, 8 * l])
+    assert vecs_h.size() == torch.Size([batch, len2, 8 * l])
 
     result_len_p = get_lengths_from_binary_sequence_mask(vecs_p > 0.0)
     result_len_h = get_lengths_from_binary_sequence_mask(vecs_h > 0.0)
