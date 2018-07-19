@@ -5,31 +5,56 @@ import torch.nn.functional as F
 from allennlp.common.registrable import FromParams
 from allennlp.nn.util import get_lengths_from_binary_sequence_mask
 
-def mp_matching_func(v1, v2, w):
+
+def mpm_single(v1, v2, w):
     """
     :param v1: (batch, seq_len, hidden_size)
-    :param v2: (batch, seq_len, hidden_size) or (batch, hidden_size)
+    :param v2: (batch, hidden_size)
     :param w: (num_perspective, hidden_size)
     :return: (batch, num_perspective)
     """
-    seq_len = v1.size(1)
-    num_perspective = w.size()[0]
+    batch_size, seq_len, hidden_size = v1.shape
+    num_perspective = w.size(0)
+
+    assert len(v2.size()) == 2 and v2.size(1) == w.size(1) == hidden_size and v2.size(0) == batch_size
 
     # (1, 1, hidden_size, num_perspective)
     w = w.transpose(1, 0).unsqueeze(0).unsqueeze(0)
+
     # (batch, seq_len, hidden_size, num_perspective)
     v1 = w * torch.stack([v1] * num_perspective, dim=3)
-    if len(v2.size()) == 3:
-        v2 = w * torch.stack([v2] * num_perspective, dim=3)
-    else:
-        v2 = w * torch.stack([torch.stack([v2] * seq_len, dim=1)] * num_perspective, dim=3)
+    v2 = w * torch.stack([torch.stack([v2] * seq_len, dim=1)] * num_perspective, dim=3)
 
     m = F.cosine_similarity(v1, v2, dim=2)
 
     return m
 
 
-def mp_matching_func_pairwise(v1, v2, w):
+def mpm(v1, v2, w):
+    """
+    :param v1: (batch, seq_len, hidden_size)
+    :param v2: (batch, seq_len, hidden_size)
+    :param w: (num_perspective, hidden_size)
+    :return: (batch, num_perspective)
+    """
+    batch_size, seq_len, hidden_size = v1.shape
+    num_perspective = w.size(0)
+
+    assert v1.shape == v2.shape and w.size(1) == hidden_size
+
+    # (1, 1, hidden_size, num_perspective)
+    w = w.transpose(1, 0).unsqueeze(0).unsqueeze(0)
+
+    # (batch, seq_len, hidden_size, num_perspective)
+    v1 = w * torch.stack([v1] * num_perspective, dim=3)
+    v2 = w * torch.stack([v2] * num_perspective, dim=3)
+
+    m = F.cosine_similarity(v1, v2, dim=2)
+
+    return m
+
+
+def mpm_pairwise(v1, v2, w):
     """
     :param v1: (batch, seq_len1, hidden_size)
     :param v2: (batch, seq_len2, hidden_size)
@@ -41,9 +66,12 @@ def mp_matching_func_pairwise(v1, v2, w):
 
     # (1, num_perspective, 1, hidden_size)
     w = w.unsqueeze(0).unsqueeze(2)
+
     # (batch, num_perspective, seq_len, hidden_size)
-    v1, v2 = w * torch.stack([v1] * num_perspective, dim=1), w * torch.stack([v2] * num_perspective, dim=1)
-    # (batch, num_perspective, seq_len, hidden_size->1)
+    v1 = w * torch.stack([v1] * num_perspective, dim=1)
+    v2 = w * torch.stack([v2] * num_perspective, dim=1)
+
+    # (batch, num_perspective, seq_len, 1)
     v1_norm = v1.norm(p=2, dim=3, keepdim=True)
     v2_norm = v2.norm(p=2, dim=3, keepdim=True)
 
@@ -52,17 +80,20 @@ def mp_matching_func_pairwise(v1, v2, w):
     d = v1_norm * v2_norm.transpose(2, 3)
 
     # (batch, seq_len1, seq_len2, num_perspective)
-    m = div_with_small_value(n, d).permute(0, 2, 3, 1)
+    m = div_safe(n, d).permute(0, 2, 3, 1)
 
     return m
 
 
-def attention(v1, v2):
+def cosine_pairwise(v1, v2):
     """
     :param v1: (batch, seq_len1, hidden_size)
     :param v2: (batch, seq_len2, hidden_size)
     :return: (batch, seq_len1, seq_len2)
     """
+
+    batch_size = v1.size(0)
+    assert batch_size == v2.size(0) and v1.size(2) == v2.size(2)
 
     # (batch, seq_len1, 1)
     v1_norm = v1.norm(p=2, dim=2, keepdim=True)
@@ -73,13 +104,14 @@ def attention(v1, v2):
     a = torch.bmm(v1, v2.permute(0, 2, 1))
     d = v1_norm * v2_norm
 
-    return div_with_small_value(a, d)
+    result = div_safe(a, d)
+
+    return result
 
 
-def div_with_small_value(n, d, eps=1e-8):
+def div_safe(n, d, eps=1e-8):
     # too small values are replaced by 1e-8 to prevent it from exploding.
-    d = torch.clamp(d, min=eps)
-    return n / d
+    return n / torch.clamp(d, min=eps)
 
 
 class MatchingLayer(nn.Module, FromParams):
@@ -107,6 +139,24 @@ class MatchingLayer(nn.Module, FromParams):
             nn.init.kaiming_normal_(para)
         
     def forward(self, context_p, mask_p, context_h, mask_h):
+        """
+        Given the representations of two sentences from BiLSTM, apply four bilateral
+        matching functions between premise and hypothesis in both directions
+
+        Parameters
+        ----------
+        :param context_p: Tensor of shape (batch_size, seq_len, context_rnn_hidden dim * 2)
+            representing premise as encoded by the forward and backward layer of a BiLSTM.
+        :param mask_p: Binary Tensor of shape (batch_size, seq_len), indicating which
+            positions in premise are padding (0) and which are not (1).
+        :param context_h: Tensor of shape (batch_size, seq_len, context_rnn_hidden dim * 2)
+            representing hypothesis as encoded by the forward and backward layer of a BiLSTM.
+        :param mask_h: Binary Tensor of shape (batch_size, seq_len), indicating which
+            positions in hypothesis are padding (0) and which are not (1).
+        :return (mv_p, mv_h): Matching vectors for premise and hypothesis, each of shape
+            (batch, seq_len, num_perspective * num_matching)
+        """
+
         # (batch, seq_len, hidden_dim)
         assert context_p.size(-1) == context_h.size(-1) == self.hidden_dim * 2
 
@@ -118,22 +168,24 @@ class MatchingLayer(nn.Module, FromParams):
         len_h = get_lengths_from_binary_sequence_mask(mask_h)
 
         # (batch, 1, hidden_dim)
-        # TODO: deal with length == 0?
-        last_index_p = (len_p-1).view(-1, 1, 1).expand(-1, 1, self.hidden_dim)
-        last_index_h = (len_h-1).view(-1, 1, 1).expand(-1, 1, self.hidden_dim)
+        last_token_p = torch.clamp(len_p - 1, min=0)
+        last_token_p = last_token_p.view(-1, 1, 1).expand(-1, 1, self.hidden_dim)
+        last_token_h = torch.clamp(len_h - 1, min=0)
+        last_token_h = last_token_h.view(-1, 1, 1).expand(-1, 1, self.hidden_dim)
 
-        mv_p = []
-        mv_h = []
+        mv_p, mv_h = [], []
 
         # 1. Full-Matching
         if not self.wo_full_match:
             # (batch, seq_len, hidden_size), (batch, hidden_size)
             # -> (batch, seq_len, num_perspective)
             mv_idx = len(mv_p)
-            mv_p_full_fw = mp_matching_func(context_p_fw, context_h_fw.gather(1, last_index_h), self.params[mv_idx])
-            mv_p_full_bw = mp_matching_func(context_p_bw, context_h_bw[:, 0, :], self.params[mv_idx + 1])
-            mv_h_full_fw = mp_matching_func(context_h_fw, context_p_fw.gather(1, last_index_p), self.params[mv_idx])
-            mv_h_full_bw = mp_matching_func(context_h_bw, context_p_bw[:, 0, :], self.params[mv_idx + 1])
+            context_p_fw_last = context_p_fw.gather(1, last_token_p).squeeze(dim=1)
+            context_h_fw_last = context_h_fw.gather(1, last_token_h).squeeze(dim=1)
+            mv_p_full_fw = mpm_single(context_p_fw, context_h_fw_last, self.params[mv_idx])
+            mv_p_full_bw = mpm_single(context_p_bw, context_h_bw[:, 0, :], self.params[mv_idx + 1])
+            mv_h_full_fw = mpm_single(context_h_fw, context_p_fw_last, self.params[mv_idx])
+            mv_h_full_bw = mpm_single(context_h_bw, context_p_bw[:, 0, :], self.params[mv_idx + 1])
             mv_p.extend([mv_p_full_fw, mv_p_full_bw])
             mv_h.extend([mv_h_full_fw, mv_h_full_bw])
 
@@ -141,8 +193,8 @@ class MatchingLayer(nn.Module, FromParams):
         if not self.wo_maxpool_match:
             # (batch, seq_len1, seq_len2, num_perspective)
             mv_idx = len(mv_p)
-            mv_max_fw = mp_matching_func_pairwise(context_p_fw, context_h_fw, self.params[mv_idx])
-            mv_max_bw = mp_matching_func_pairwise(context_p_bw, context_h_bw, self.params[mv_idx + 1])
+            mv_max_fw = mpm_pairwise(context_p_fw, context_h_fw, self.params[mv_idx])
+            mv_max_bw = mpm_pairwise(context_p_bw, context_h_bw, self.params[mv_idx + 1])
 
             # (batch, seq_len, num_perspective)
             mv_p_max_fw, _ = mv_max_fw.max(dim=2)
@@ -155,38 +207,38 @@ class MatchingLayer(nn.Module, FromParams):
         # 3. Attentive-Matching
 
         # (batch, seq_len1, seq_len2)
-        att_fw = attention(context_p_fw, context_h_fw)
-        att_bw = attention(context_p_bw, context_h_bw)
+        cosine_fw = cosine_pairwise(context_p_fw, context_h_fw)
+        cosine_bw = cosine_pairwise(context_p_bw, context_h_bw)
 
         # (batch, seq_len2, hidden_size) -> (batch, 1, seq_len2, hidden_size)
         # (batch, seq_len1, seq_len2) -> (batch, seq_len1, seq_len2, 1)
         # -> (batch, seq_len1, seq_len2, hidden_size)
-        att_h_fw = context_h_fw.unsqueeze(1) * att_fw.unsqueeze(3)
-        att_h_bw = context_h_bw.unsqueeze(1) * att_bw.unsqueeze(3)
+        att_h_fw = context_h_fw.unsqueeze(1) * cosine_fw.unsqueeze(3)
+        att_h_bw = context_h_bw.unsqueeze(1) * cosine_bw.unsqueeze(3)
         # (batch, seq_len1, hidden_size) -> (batch, seq_len1, 1, hidden_size)
         # (batch, seq_len1, seq_len2) -> (batch, seq_len1, seq_len2, 1)
         # -> (batch, seq_len1, seq_len2, hidden_size)
-        att_p_fw = context_p_fw.unsqueeze(2) * att_fw.unsqueeze(3)
-        att_p_bw = context_p_bw.unsqueeze(2) * att_bw.unsqueeze(3)
+        att_p_fw = context_p_fw.unsqueeze(2) * cosine_fw.unsqueeze(3)
+        att_p_bw = context_p_bw.unsqueeze(2) * cosine_bw.unsqueeze(3)
         
         if not self.wo_attentive_match:
 
             # (batch, seq_len1, hidden_size) / (batch, seq_len1, 1) -> 
             # (batch, seq_len1, hidden_size)
-            att_mean_h_fw = div_with_small_value(att_h_fw.sum(dim=2), att_fw.sum(dim=2, keepdim=True))
-            att_mean_h_bw = div_with_small_value(att_h_bw.sum(dim=2), att_bw.sum(dim=2, keepdim=True))
+            att_mean_h_fw = div_safe(att_h_fw.sum(dim=2), cosine_fw.sum(dim=2, keepdim=True))
+            att_mean_h_bw = div_safe(att_h_bw.sum(dim=2), cosine_bw.sum(dim=2, keepdim=True))
 
             # (batch, seq_len2, hidden_size) / (batch, seq_len2, 1) -> 
             # (batch, seq_len2, hidden_size)
-            att_mean_p_fw = div_with_small_value(att_p_fw.sum(dim=1), att_fw.sum(dim=1, keepdim=True).permute(0, 2, 1))
-            att_mean_p_bw = div_with_small_value(att_p_bw.sum(dim=1), att_bw.sum(dim=1, keepdim=True).permute(0, 2, 1))
+            att_mean_p_fw = div_safe(att_p_fw.sum(dim=1), cosine_fw.sum(dim=1, keepdim=True).permute(0, 2, 1))
+            att_mean_p_bw = div_safe(att_p_bw.sum(dim=1), cosine_bw.sum(dim=1, keepdim=True).permute(0, 2, 1))
 
             # (batch, seq_len, num_perspective)
             mv_idx = len(mv_p)
-            mv_p_att_mean_fw = mp_matching_func(context_p_fw, att_mean_h_fw, self.params[mv_idx])
-            mv_p_att_mean_bw = mp_matching_func(context_p_bw, att_mean_h_bw, self.params[mv_idx + 1])
-            mv_h_att_mean_fw = mp_matching_func(context_h_fw, att_mean_p_fw, self.params[mv_idx])
-            mv_h_att_mean_bw = mp_matching_func(context_h_bw, att_mean_p_bw, self.params[mv_idx + 1])
+            mv_p_att_mean_fw = mpm(context_p_fw, att_mean_h_fw, self.params[mv_idx])
+            mv_p_att_mean_bw = mpm(context_p_bw, att_mean_h_bw, self.params[mv_idx + 1])
+            mv_h_att_mean_fw = mpm(context_h_fw, att_mean_p_fw, self.params[mv_idx])
+            mv_h_att_mean_bw = mpm(context_h_bw, att_mean_p_bw, self.params[mv_idx + 1])
             mv_p.extend([mv_p_att_mean_fw, mv_p_att_mean_bw])
             mv_h.extend([mv_h_att_mean_fw, mv_h_att_mean_bw])
 
@@ -201,10 +253,10 @@ class MatchingLayer(nn.Module, FromParams):
 
             # (batch, seq_len, num_perspective)
             mv_idx = len(mv_p)
-            mv_p_att_max_fw = mp_matching_func(context_p_fw, att_max_h_fw, self.params[mv_idx])
-            mv_p_att_max_bw = mp_matching_func(context_p_bw, att_max_h_bw, self.params[mv_idx + 1])
-            mv_h_att_max_fw = mp_matching_func(context_h_fw, att_max_p_fw, self.params[mv_idx])
-            mv_h_att_max_bw = mp_matching_func(context_h_bw, att_max_p_bw, self.params[mv_idx + 1])
+            mv_p_att_max_fw = mpm(context_p_fw, att_max_h_fw, self.params[mv_idx])
+            mv_p_att_max_bw = mpm(context_p_bw, att_max_h_bw, self.params[mv_idx + 1])
+            mv_h_att_max_fw = mpm(context_h_fw, att_max_p_fw, self.params[mv_idx])
+            mv_h_att_max_bw = mpm(context_h_bw, att_max_p_bw, self.params[mv_idx + 1])
             
             mv_p.extend([mv_p_att_max_fw, mv_p_att_max_bw])
             mv_h.extend([mv_h_att_max_fw, mv_h_att_max_bw])
@@ -218,18 +270,43 @@ class MatchingLayer(nn.Module, FromParams):
 
 
 if __name__ == "__main__":
+
+
     from allennlp.common import Params
+
+    torch.set_printoptions(edgeitems=20)
     torch.manual_seed(999)
 
     batch = 16
-    seq_len = 50
+    len1, len2 = 21, 24
+    seq_len1 = torch.randint(low=len1-10, high=len1+1, size=(batch,)).long()
+    seq_len2 = torch.randint(low=len2-10, high=len2+1, size=(batch,)).long()
+
+    mask1 = []
+    for l in seq_len1:
+        mask1.append([1] * l.item() + [0] * (len1 - l.item()))
+    mask1 = torch.FloatTensor(mask1)
+    mask2 = []
+    for l in seq_len2:
+        mask2.append([1] * l.item() + [0] * (len2 - l.item()))
+    mask2 = torch.FloatTensor(mask2)
+
     dim = 200
-    test_input_p = torch.autograd.Variable(torch.randn(batch, seq_len, dim))
-    test_input_h = torch.autograd.Variable(torch.randn(batch, seq_len, dim))
     l = 5
+    test1 = torch.randn(batch, len1, dim)
+    test2 = torch.randn(batch, len2, dim)
+    test1 = test1 * mask1.view(-1, len1, 1).expand(-1, len1, dim)
+    test2 = test2 * mask2.view(-1, len2, 1).expand(-1, len2, dim)
 
     ml = MatchingLayer.from_params(Params({"num_perspective": l}))
 
-    p_vecs, h_vecs = ml(test_input_p, test_input_h)
+    vecs_p, vecs_h = ml(test1, mask1, test2, mask2)
 
-    assert p_vecs.size() == h_vecs.size() == torch.Size([batch, seq_len, 8*l])
+    assert vecs_p.size() == torch.Size([batch, len1, 8*l])
+    assert vecs_h.size() == torch.Size([batch, len2, 8*l])
+
+    result_len_p = get_lengths_from_binary_sequence_mask(vecs_p > 0.0)
+    result_len_h = get_lengths_from_binary_sequence_mask(vecs_h > 0.0)
+
+    print("vecs_p", vecs_p)
+    print("vecs_h", vecs_h)
