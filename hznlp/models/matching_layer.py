@@ -5,31 +5,6 @@ import torch.nn.functional as F
 from allennlp.common.registrable import FromParams
 from allennlp.nn.util import get_lengths_from_binary_sequence_mask
 
-
-def mpm_single(v1, v2, w):
-    """
-    :param v1: (batch, seq_len, hidden_size)
-    :param v2: (batch, hidden_size)
-    :param w: (num_perspective, hidden_size)
-    :return: (batch, num_perspective)
-    """
-    batch_size, seq_len, hidden_size = v1.shape
-    num_perspective = w.size(0)
-
-    assert len(v2.size()) == 2 and v2.size(1) == w.size(1) == hidden_size and v2.size(0) == batch_size
-
-    # (1, 1, hidden_size, num_perspective)
-    w = w.transpose(1, 0).unsqueeze(0).unsqueeze(0)
-
-    # (batch, seq_len, hidden_size, num_perspective)
-    v1 = w * torch.stack([v1] * num_perspective, dim=3)
-    v2 = w * torch.stack([torch.stack([v2] * seq_len, dim=1)] * num_perspective, dim=3)
-
-    m = F.cosine_similarity(v1, v2, dim=2)
-
-    return m
-
-
 def mpm(v1, v2, w):
     """
     :param v1: (batch, seq_len, hidden_size)
@@ -42,16 +17,31 @@ def mpm(v1, v2, w):
 
     assert v1.shape == v2.shape and w.size(1) == hidden_size
 
-    # (1, 1, hidden_size, num_perspective)
-    w = w.transpose(1, 0).unsqueeze(0).unsqueeze(0)
+    # (1, 1, num_perspective, hidden_size)
+    w = w.unsqueeze(0).unsqueeze(0)
 
-    # (batch, seq_len, hidden_size, num_perspective)
-    v1 = w * torch.stack([v1] * num_perspective, dim=3)
-    v2 = w * torch.stack([v2] * num_perspective, dim=3)
+    # (batch, seq_len, num_perspective, hidden_size)
+    v1 = w * v1.unsqueeze(2).expand(-1, -1, num_perspective, -1)
+    v2 = w * v2.unsqueeze(2).expand(-1, -1, num_perspective, -1)
 
-    m = F.cosine_similarity(v1, v2, dim=2)
+    m = F.cosine_similarity(v1, v2, dim=3)
 
     return m
+
+
+def mpm_single(v1, v2, w):
+    """
+    :param v1: (batch, seq_len, hidden_size)
+    :param v2: (batch, hidden_size)
+    :param w: (num_perspective, hidden_size)
+    :return: (batch, seq_len, num_perspective)
+    """
+
+    # (batch, seq_len, hidden_size)
+    seq_len = v1.size(1)
+    v2 = v2.unsqueeze(1).expand(-1, seq_len, -1)
+
+    return mpm(v1, v2, w)
 
 
 def mpm_pairwise(v1, v2, w):
@@ -59,17 +49,17 @@ def mpm_pairwise(v1, v2, w):
     :param v1: (batch, seq_len1, hidden_size)
     :param v2: (batch, seq_len2, hidden_size)
     :param w: (num_perspective, hidden_size)
-    :return: (batch, num_perspective, seq_len1, seq_len2)
+    :return: (batch, seq_len1, seq_len2, num_perspective)
     """
 
-    num_perspective = w.size()[0]
+    num_perspective = w.size(0)
 
     # (1, num_perspective, 1, hidden_size)
     w = w.unsqueeze(0).unsqueeze(2)
 
     # (batch, num_perspective, seq_len, hidden_size)
-    v1 = w * torch.stack([v1] * num_perspective, dim=1)
-    v2 = w * torch.stack([v2] * num_perspective, dim=1)
+    v1 = w * v1.unsqueeze(1).expand(-1, num_perspective, -1, -1)
+    v2 = w * v2.unsqueeze(1).expand(-1, num_perspective, -1, -1)
 
     # (batch, num_perspective, seq_len, 1)
     v1_norm = v1.norm(p=2, dim=3, keepdim=True)
@@ -168,24 +158,31 @@ class MatchingLayer(nn.Module, FromParams):
         len_h = get_lengths_from_binary_sequence_mask(mask_h)
 
         # (batch, 1, hidden_dim)
-        last_token_p = torch.clamp(len_p - 1, min=0)
-        last_token_p = last_token_p.view(-1, 1, 1).expand(-1, 1, self.hidden_dim)
-        last_token_h = torch.clamp(len_h - 1, min=0)
-        last_token_h = last_token_h.view(-1, 1, 1).expand(-1, 1, self.hidden_dim)
+        last_token_p = torch.clamp(len_p - 1, min=0).view(-1, 1, 1)
+        last_token_h = torch.clamp(len_h - 1, min=0).view(-1, 1, 1)
+        # (batch, 1, hidden_dim)
+        last_token_p = last_token_p.expand(-1, 1, self.hidden_dim)
+        last_token_h = last_token_h.expand(-1, 1, self.hidden_dim)
 
         mv_p, mv_h = [], []
 
         # 1. Full-Matching
         if not self.wo_full_match:
-            # (batch, seq_len, hidden_size), (batch, hidden_size)
-            # -> (batch, seq_len, num_perspective)
+
             mv_idx = len(mv_p)
+
+            # (batch, hidden_size)
             context_p_fw_last = context_p_fw.gather(1, last_token_p).squeeze(dim=1)
             context_h_fw_last = context_h_fw.gather(1, last_token_h).squeeze(dim=1)
+            context_p_bw_last = context_p_bw[:, 0, :]
+            context_h_bw_last = context_h_bw[:, 0, :]
+
+            # (batch, seq_len, num_perspective)
             mv_p_full_fw = mpm_single(context_p_fw, context_h_fw_last, self.params[mv_idx])
-            mv_p_full_bw = mpm_single(context_p_bw, context_h_bw[:, 0, :], self.params[mv_idx + 1])
+            mv_p_full_bw = mpm_single(context_p_bw, context_h_bw_last, self.params[mv_idx + 1])
             mv_h_full_fw = mpm_single(context_h_fw, context_p_fw_last, self.params[mv_idx])
-            mv_h_full_bw = mpm_single(context_h_bw, context_p_bw[:, 0, :], self.params[mv_idx + 1])
+            mv_h_full_bw = mpm_single(context_h_bw, context_p_bw_last, self.params[mv_idx + 1])
+
             mv_p.extend([mv_p_full_fw, mv_p_full_bw])
             mv_h.extend([mv_h_full_fw, mv_h_full_bw])
 
@@ -274,7 +271,7 @@ if __name__ == "__main__":
 
     from allennlp.common import Params
 
-    torch.set_printoptions(edgeitems=20)
+    torch.set_printoptions(linewidth=150, edgeitems=3)
     torch.manual_seed(999)
 
     batch = 16
