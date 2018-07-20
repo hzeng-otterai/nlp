@@ -21,6 +21,9 @@ def mpm(v1, v2, w):
 
     assert v1.shape == v2.shape and w.size(1) == hidden_size
 
+    # (batch, seq_len, 1)
+    mv_1 = F.cosine_similarity(v1, v2, 2).unsqueeze(2)
+
     # (1, 1, num_perspective, hidden_size)
     w = w.unsqueeze(0).unsqueeze(0)
 
@@ -28,27 +31,9 @@ def mpm(v1, v2, w):
     v1 = w * v1.unsqueeze(2).expand(-1, -1, num_perspective, -1)
     v2 = w * v2.unsqueeze(2).expand(-1, -1, num_perspective, -1)
 
-    m = F.cosine_similarity(v1, v2, dim=3)
+    mv_many = F.cosine_similarity(v1, v2, dim=3)
 
-    return m
-
-
-def mpm_single(v1, v2, w):
-    """
-    Calculate multi-perspective cosine matching between time steps of vectors
-    and a single vector.
-
-    :param v1: (batch, seq_len, hidden_size)
-    :param v2: (batch, hidden_size)
-    :param w: (num_perspective, hidden_size)
-    :return: (batch, seq_len, num_perspective)
-    """
-
-    # (batch, seq_len, hidden_size)
-    seq_len = v1.size(1)
-    v2 = v2.unsqueeze(1).expand(-1, seq_len, -1)
-
-    return mpm(v1, v2, w)
+    return mv_1, mv_many
 
 
 def mpm_pairwise(v1, v2, w):
@@ -164,6 +149,7 @@ class MatchingLayer(nn.Module, FromParams):
 
         # (batch, seq_len, hidden_dim)
         assert context_p.size(-1) == context_h.size(-1) == self.hidden_dim * 2
+        seq_len_p, seq_len_h = context_p.size(1), context_h.size(1)
 
         context_p_fw, context_p_bw = torch.split(context_p, self.hidden_dim, dim=-1)
         context_h_fw, context_h_bw = torch.split(context_h, self.hidden_dim, dim=-1)
@@ -175,33 +161,65 @@ class MatchingLayer(nn.Module, FromParams):
         # (batch, 1, hidden_dim)
         last_token_p = torch.clamp(len_p - 1, min=0).view(-1, 1, 1)
         last_token_h = torch.clamp(len_h - 1, min=0).view(-1, 1, 1)
+
         # (batch, 1, hidden_dim)
         last_token_p = last_token_p.expand(-1, 1, self.hidden_dim)
         last_token_h = last_token_h.expand(-1, 1, self.hidden_dim)
 
+        # array to keep the matching vectors for premise and hypothesis
         mv_p, mv_h = [], []
+
+        # First calculate the cosine similarities between each forward
+        # (or backward) contextual embedding and every forward (or backward)
+        # contextual embedding of the other sentence.
+
+        # (batch, seq_len1, seq_len2)
+        cosine_fw = cosine_pairwise(context_p_fw, context_h_fw)
+        cosine_bw = cosine_pairwise(context_p_bw, context_h_bw)
+
+        # (batch, seq_len1, 1)
+        cosine_fw_max_p, _ = cosine_fw.max(dim=2, keepdim=True)
+        cosine_bw_max_p, _ = cosine_bw.max(dim=2, keepdim=True)
+        cosine_fw_mean_p = cosine_fw.mean(dim=2, keepdim=True)
+        cosine_bw_mean_p = cosine_bw.mean(dim=2, keepdim=True)
+
+        # (batch, seq_len2, 1)
+        cosine_fw_max_h, _ = cosine_fw.max(dim=1, keepdim=True)
+        cosine_bw_max_h, _ = cosine_bw.max(dim=1, keepdim=True)
+        cosine_fw_mean_h = cosine_fw.mean(dim=1, keepdim=True)
+        cosine_bw_mean_h = cosine_bw.mean(dim=1, keepdim=True)
+        cosine_fw_max_h = cosine_fw_max_h.permute(0, 2, 1)
+        cosine_bw_max_h = cosine_bw_max_h.permute(0, 2, 1)
+        cosine_fw_mean_h = cosine_fw_mean_h.permute(0, 2, 1)
+        cosine_bw_mean_h = cosine_bw_mean_h.permute(0, 2, 1)
+
+        mv_p.extend([cosine_fw_max_p, cosine_fw_mean_p, cosine_bw_max_p, cosine_bw_mean_p])
+        mv_h.extend([cosine_fw_max_h, cosine_fw_mean_h, cosine_bw_max_h, cosine_bw_mean_h])
+
+        mv_idx = 0
 
         # 1. Full-Matching
         # Each time step of forward (or backward) contextual embedding of one sentence
         # is compared with the last time step of the forward (or backward)
         # contextual embedding of the other sentence
         if not self.wo_full_match:
-            mv_idx = len(mv_p)
 
-            # (batch, hidden_size)
-            context_p_fw_last = context_p_fw.gather(1, last_token_p).squeeze(dim=1)
-            context_h_fw_last = context_h_fw.gather(1, last_token_h).squeeze(dim=1)
-            context_p_bw_last = context_p_bw[:, 0, :]
-            context_h_bw_last = context_h_bw[:, 0, :]
+            # (batch, 1, hidden_size)
+            context_p_fw_last = context_p_fw.gather(1, last_token_p)
+            context_h_fw_last = context_h_fw.gather(1, last_token_h)
+            context_p_bw_last = context_p_bw[:, 0:1, :]
+            context_h_bw_last = context_h_bw[:, 0:1, :]
 
             # (batch, seq_len, num_perspective)
-            mv_p_full_fw = mpm_single(context_p_fw, context_h_fw_last, self.params[mv_idx])
-            mv_p_full_bw = mpm_single(context_p_bw, context_h_bw_last, self.params[mv_idx + 1])
-            mv_h_full_fw = mpm_single(context_h_fw, context_p_fw_last, self.params[mv_idx])
-            mv_h_full_bw = mpm_single(context_h_bw, context_p_bw_last, self.params[mv_idx + 1])
+            mv_p_full_fw = mpm(context_p_fw, context_h_fw_last.expand(-1, seq_len_p, -1), self.params[mv_idx])
+            mv_p_full_bw = mpm(context_p_bw, context_h_bw_last.expand(-1, seq_len_p, -1), self.params[mv_idx + 1])
+            mv_h_full_fw = mpm(context_h_fw, context_p_fw_last.expand(-1, seq_len_h, -1), self.params[mv_idx])
+            mv_h_full_bw = mpm(context_h_bw, context_p_bw_last.expand(-1, seq_len_h, -1), self.params[mv_idx + 1])
 
-            mv_p.extend([mv_p_full_fw, mv_p_full_bw])
-            mv_h.extend([mv_h_full_fw, mv_h_full_bw])
+            mv_p.extend(mv_p_full_fw + mv_p_full_bw)
+            mv_h.extend(mv_h_full_fw + mv_h_full_bw)
+
+            mv_idx += 2
 
         # 2. Maxpooling-Matching
         # Each time step of forward (or backward) contextual embedding of one sentence
@@ -210,38 +228,37 @@ class MatchingLayer(nn.Module, FromParams):
         # dimension is retained.
         if not self.wo_maxpool_match:
             # (batch, seq_len1, seq_len2, num_perspective)
-            mv_idx = len(mv_p)
             mv_max_fw = mpm_pairwise(context_p_fw, context_h_fw, self.params[mv_idx])
             mv_max_bw = mpm_pairwise(context_p_bw, context_h_bw, self.params[mv_idx + 1])
 
             # (batch, seq_len, num_perspective)
             mv_p_max_fw, _ = mv_max_fw.max(dim=2)
+            mv_p_mean_fw = mv_max_fw.mean(dim=2)
             mv_p_max_bw, _ = mv_max_bw.max(dim=2)
+            mv_p_mean_bw = mv_max_bw.mean(dim=2)
             mv_h_max_fw, _ = mv_max_fw.max(dim=1)
+            mv_h_mean_fw = mv_max_fw.mean(dim=1)
             mv_h_max_bw, _ = mv_max_bw.max(dim=1)
-            mv_p.extend([mv_p_max_fw, mv_p_max_bw])
-            mv_h.extend([mv_h_max_fw, mv_h_max_bw])
+            mv_h_mean_bw = mv_max_bw.mean(dim=1)
+            mv_p.extend([mv_p_max_fw, mv_p_mean_fw, mv_p_max_bw, mv_p_mean_bw])
+            mv_h.extend([mv_h_max_fw, mv_h_mean_fw, mv_h_max_bw, mv_h_mean_bw])
+
+            mv_idx += 2
 
         # 3. Attentive-Matching
-        # First calculate the cosine similarities between each forward
-        # (or backward) contextual embedding and every forward (or backward)
-        # contextual embedding of the other sentence.
-        # Then each forward (or backward) similarity is taken as the weight
+        # Each forward (or backward) similarity is taken as the weight
         # of the forward (or backward) contextual embedding, and calculate an
         # attentive vector for the sentence by weighted summing all its
         # contextual embeddings.
         # Finally match each forward (or backward) contextual embedding
         # with its corresponding attentive vector.
 
-        # (batch, seq_len1, seq_len2)
-        cosine_fw = cosine_pairwise(context_p_fw, context_h_fw)
-        cosine_bw = cosine_pairwise(context_p_bw, context_h_bw)
-
         # (batch, seq_len2, hidden_size) -> (batch, 1, seq_len2, hidden_size)
         # (batch, seq_len1, seq_len2) -> (batch, seq_len1, seq_len2, 1)
         # -> (batch, seq_len1, seq_len2, hidden_size)
         att_h_fw = context_h_fw.unsqueeze(1) * cosine_fw.unsqueeze(3)
         att_h_bw = context_h_bw.unsqueeze(1) * cosine_bw.unsqueeze(3)
+
         # (batch, seq_len1, hidden_size) -> (batch, seq_len1, 1, hidden_size)
         # (batch, seq_len1, seq_len2) -> (batch, seq_len1, seq_len2, 1)
         # -> (batch, seq_len1, seq_len2, hidden_size)
@@ -260,13 +277,14 @@ class MatchingLayer(nn.Module, FromParams):
             att_mean_p_bw = div_safe(att_p_bw.sum(dim=1), cosine_bw.sum(dim=1, keepdim=True).permute(0, 2, 1))
 
             # (batch, seq_len, num_perspective)
-            mv_idx = len(mv_p)
             mv_p_att_mean_fw = mpm(context_p_fw, att_mean_h_fw, self.params[mv_idx])
             mv_p_att_mean_bw = mpm(context_p_bw, att_mean_h_bw, self.params[mv_idx + 1])
             mv_h_att_mean_fw = mpm(context_h_fw, att_mean_p_fw, self.params[mv_idx])
             mv_h_att_mean_bw = mpm(context_h_bw, att_mean_p_bw, self.params[mv_idx + 1])
-            mv_p.extend([mv_p_att_mean_fw, mv_p_att_mean_bw])
-            mv_h.extend([mv_h_att_mean_fw, mv_h_att_mean_bw])
+            mv_p.extend(mv_p_att_mean_fw + mv_p_att_mean_bw)
+            mv_h.extend(mv_h_att_mean_fw + mv_h_att_mean_bw)
+
+            mv_idx += 2
 
         # 4. Max-Attentive-Matching
         # Pick the contextual embeddings with the highest cosine similarity as the attentive
@@ -281,14 +299,15 @@ class MatchingLayer(nn.Module, FromParams):
             att_max_p_bw, _ = att_p_bw.max(dim=1)
 
             # (batch, seq_len, num_perspective)
-            mv_idx = len(mv_p)
             mv_p_att_max_fw = mpm(context_p_fw, att_max_h_fw, self.params[mv_idx])
             mv_p_att_max_bw = mpm(context_p_bw, att_max_h_bw, self.params[mv_idx + 1])
             mv_h_att_max_fw = mpm(context_h_fw, att_max_p_fw, self.params[mv_idx])
             mv_h_att_max_bw = mpm(context_h_bw, att_max_p_bw, self.params[mv_idx + 1])
 
-            mv_p.extend([mv_p_att_max_fw, mv_p_att_max_bw])
-            mv_h.extend([mv_h_att_max_fw, mv_h_att_max_bw])
+            mv_p.extend(mv_p_att_max_fw + mv_p_att_max_bw)
+            mv_h.extend(mv_h_att_max_fw + mv_h_att_max_bw)
+
+            mv_idx += 2
 
         # Lastly, concatenate the four matching results
         # (batch, seq_len, num_perspective * num_matching)
@@ -320,21 +339,21 @@ if __name__ == "__main__":
     mask2 = torch.FloatTensor(mask2)
 
     dim = 200
-    l = 5
+    num_perspective = 20
     test1 = torch.randn(batch, len1, dim)
     test2 = torch.randn(batch, len2, dim)
     test1 = test1 * mask1.view(-1, len1, 1).expand(-1, len1, dim)
     test2 = test2 * mask2.view(-1, len2, 1).expand(-1, len2, dim)
 
-    ml = MatchingLayer.from_params(Params({"num_perspective": l}))
+    ml = MatchingLayer.from_params(Params({"num_perspective": num_perspective}))
 
     vecs_p, vecs_h = ml(test1, mask1, test2, mask2)
 
-    assert vecs_p.size() == torch.Size([batch, len1, 8 * l])
-    assert vecs_h.size() == torch.Size([batch, len2, 8 * l])
+    assert vecs_p.size() == torch.Size([batch, len1, 4 + 6 * (num_perspective + 1) + 4 * num_perspective])
+    assert vecs_h.size() == torch.Size([batch, len2, 4 + 6 * (num_perspective + 1) + 4 * num_perspective])
 
     result_len_p = get_lengths_from_binary_sequence_mask(vecs_p > 0.0)
     result_len_h = get_lengths_from_binary_sequence_mask(vecs_h > 0.0)
 
-    print("vecs_p", vecs_p)
-    print("vecs_h", vecs_h)
+    print("vecs_p", vecs_p.shape, vecs_p)
+    print("vecs_h", vecs_h.shape, vecs_h)

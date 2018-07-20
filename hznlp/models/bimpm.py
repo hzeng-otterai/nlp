@@ -23,6 +23,7 @@ class BiMPM(Model):
                  matcher: MatchingLayer,
                  aggregator: Seq2VecEncoder,
                  classifier_feedforward: FeedForward,
+                 dropout: float = 0.1,
                  initializer: InitializerApplicator = InitializerApplicator(),
                  regularizer: Optional[RegularizerApplicator] = None) -> None:
         super(BiMPM, self).__init__(vocab, regularizer)
@@ -33,6 +34,8 @@ class BiMPM(Model):
         self.matcher = matcher
         self.aggregator = aggregator
         self.classifier_feedforward = classifier_feedforward
+
+        self.dropout = torch.nn.Dropout(dropout)
 
         self.metrics = {
             "accuracy": CategoricalAccuracy()
@@ -47,19 +50,21 @@ class BiMPM(Model):
                 premise: Dict[str, torch.LongTensor],
                 hypothesis: Dict[str, torch.LongTensor],
                 label: torch.LongTensor = None) -> Dict[str, torch.Tensor]:
- 
+
         mask_p = util.get_text_field_mask(premise)
         mask_h = util.get_text_field_mask(hypothesis)
 
-        embedded_p = self.text_field_embedder(premise)
-        encoded_p = self.encoder(embedded_p, mask_p)
+        embedded_p = self.dropout(self.text_field_embedder(premise))
+        encoded_p = self.dropout(self.encoder(embedded_p, mask_p))
 
-        embedded_h = self.text_field_embedder(hypothesis)
-        encoded_h = self.encoder(embedded_h, mask_h)
+        embedded_h = self.dropout(self.text_field_embedder(hypothesis))
+        encoded_h = self.dropout(self.encoder(embedded_h, mask_h))
 
         mv_p, mv_h = self.matcher(encoded_p, mask_p, encoded_h, mask_h)
-        agg_p = self.aggregator(mv_p, mask_p)
-        agg_h = self.aggregator(mv_h, mask_h)
+        mv_p, mv_h = self.dropout(mv_p), self.dropout(mv_h)
+
+        agg_p = self.dropout(self.aggregator(mv_p, mask_p))
+        agg_h = self.dropout(self.aggregator(mv_h, mask_h))
 
         logits = self.classifier_feedforward(torch.cat([agg_p, agg_h], dim=-1))
 
