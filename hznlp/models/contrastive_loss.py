@@ -11,7 +11,7 @@ class ContrastiveLoss(torch.nn.Module):
     Based on: http://yann.lecun.com/exdb/publis/pdf/hadsell-chopra-lecun-06.pdf
     """
 
-    def __init__(self, margin: float = 2.0) -> None:
+    def __init__(self, margin: float = 1.25) -> None:
 
         super(ContrastiveLoss, self).__init__()
         self.margin = margin
@@ -48,18 +48,19 @@ class CosineContrastiveLoss(torch.nn.Module):
     Maintain 1 for match, 0 for not match.
     If they match, loss is 1/4(1-cos_sim)^2.
     If they don't, it's cos_sim^2 if cos_sim < margin or 0 otherwise.
+    (Here I modify it to max(cos_sim, 0)^2)
     Margin in the paper is ~0.4.
     """
 
-    def __init__(self, margin=0.4):
+    def __init__(self, margin=0.13653):
         super(CosineContrastiveLoss, self).__init__()
         self.margin = margin
 
     def forward(self, x0: torch.Tensor, x1: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
         cos_sim = F.cosine_similarity(x0, x1)
 
-        l1 = y.float() * torch.pow((1.0-cos_sim), 2) / 4.0
-        l2 = (1 - y).float() * torch.pow(cos_sim * torch.gt(cos_sim, self.margin).float(), 2)
+        l1 = y.float() * torch.pow((1.0 - cos_sim), 2) / 4.0
+        l2 = (1 - y).float() * torch.pow(cos_sim.clamp(min=0), 2)
         loss = torch.mean(l1 + l2)
         return loss
 

@@ -65,8 +65,8 @@ class FeedForwardPair(torch.nn.Module):
         for layer_input_dim, layer_output_dim in zip(input_dims, hidden_dims):
             straight_layers.append(torch.nn.Linear(layer_input_dim, layer_output_dim))
             cross_layers.append(torch.nn.Linear(layer_input_dim, layer_output_dim))
-        self._straight_layers = torch.nn.ModuleList(straight_layers)
-        self._cross_layers = torch.nn.ModuleList(cross_layers)
+        self._straight_linear_layers = torch.nn.ModuleList(straight_layers)
+        self._cross_linear_layers = torch.nn.ModuleList(cross_layers)
         dropout_layers = [torch.nn.Dropout(p=value) for value in dropout]
         self._dropout = torch.nn.ModuleList(dropout_layers)
         self._output_dim = hidden_dims[-1]
@@ -82,7 +82,7 @@ class FeedForwardPair(torch.nn.Module):
         # pylint: disable=arguments-differ
         outputs1, outputs2 = inputs1, inputs2
 
-        for straight, cross, activation, dropout in zip(self._straight_layers, self._cross_layers, self._activations, self._dropout):
+        for straight, cross, activation, dropout in zip(self._straight_linear_layers, self._cross_linear_layers, self._activations, self._dropout):
             r1 = dropout(activation(straight(outputs1) + cross(outputs2)))
             r2 = dropout(activation(straight(outputs2) + cross(outputs1)))
             outputs1, outputs2 = r1, r2
