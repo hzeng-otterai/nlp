@@ -22,7 +22,8 @@ class ESIMBiMPM(Model):
                  encoder: Seq2SeqEncoder,
                  similarity_function: SimilarityFunction,
                  projection_feedforward: FeedForward,
-                 matcher: MatchingLayer,
+                 matcher_fw: MatchingLayer,
+                 matcher_bw: MatchingLayer,
                  inference_encoder: Seq2SeqEncoder,
                  output_feedforward: FeedForward,
                  output_logit: FeedForward,
@@ -37,7 +38,8 @@ class ESIMBiMPM(Model):
         self._matrix_attention = LegacyMatrixAttention(similarity_function)
         self._projection_feedforward = projection_feedforward
 
-        self._matcher = matcher
+        self._matcher_fw = matcher_fw
+        self._matcher_bw = matcher_bw
 
         self._inference_encoder = inference_encoder
 
@@ -94,7 +96,13 @@ class ESIMBiMPM(Model):
 
         # Using BiMPM to calculate matching vectors
         # Shape: (batch_size, seq_length, num_perspective * num_matching)
-        mv_p, mv_h = self._matcher(encoded_p, mask_p, encoded_h, mask_h)
+        dim = encoded_h.size(-1)
+        encoded_p_fw, encoded_p_bw = torch.split(encoded_p, dim // 2, dim=-1)
+        encoded_h_fw, encoded_h_bw = torch.split(encoded_h, dim // 2, dim=-1)
+        mv_p_fw, mv_h_fw = self._matcher_fw(encoded_p_fw, mask_p, encoded_h_fw, mask_h)
+        mv_p_bw, mv_h_bw = self._matcher_bw(encoded_p_bw, mask_p, encoded_h_bw, mask_h)
+        mv_p = self.dropout(torch.cat(mv_p_fw + mv_p_bw, dim=2))
+        mv_h = self.dropout(torch.cat(mv_h_fw + mv_h_bw, dim=2))
 
         # the "enhancement" layer
         # Shape: (batch_size, p_length, encoding_direction_num * encoding_hidden_dim * 4 + num_perspective * num_matching)

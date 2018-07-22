@@ -20,7 +20,8 @@ class BiMPMCosine(Model):
     def __init__(self, vocab: Vocabulary,
                  text_field_embedder: TextFieldEmbedder,
                  encoder: Seq2SeqEncoder,
-                 matcher: MatchingLayer,
+                 matcher_fw: MatchingLayer,
+                 matcher_bw: MatchingLayer,
                  aggregator: Seq2VecEncoder,
                  feedforward: FeedForwardPair,
                  margin: float = 0.4,
@@ -30,7 +31,8 @@ class BiMPMCosine(Model):
 
         self.text_field_embedder = text_field_embedder
         self.encoder = encoder
-        self.matcher = matcher
+        self.matcher_fw = matcher_fw
+        self.matcher_bw = matcher_bw
         self.aggregator = aggregator
         self.feedforward = feedforward
         self.margin = margin
@@ -58,7 +60,16 @@ class BiMPMCosine(Model):
         embedded_h = self.text_field_embedder(hypothesis)
         encoded_h = self.encoder(embedded_h, mask_h)
 
-        mv_p, mv_h = self.matcher(encoded_p, mask_p, encoded_h, mask_h)
+        dim = encoded_h.size(-1)
+        encoded_p_fw, encoded_p_bw = torch.split(encoded_p, dim // 2, dim=-1)
+        encoded_h_fw, encoded_h_bw = torch.split(encoded_h, dim // 2, dim=-1)
+
+        mv_p_fw, mv_h_fw = self.matcher_fw(encoded_p_fw, mask_p, encoded_h_fw, mask_h)
+        mv_p_bw, mv_h_bw = self.matcher_bw(encoded_p_bw, mask_p, encoded_h_bw, mask_h)
+
+        mv_p = torch.cat(mv_p_fw + mv_p_bw, dim=2)
+        mv_h = torch.cat(mv_h_fw + mv_h_bw, dim=2)
+
         agg_p = self.aggregator(mv_p, mask_p)
         agg_h = self.aggregator(mv_h, mask_h)
 

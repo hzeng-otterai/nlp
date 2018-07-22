@@ -53,7 +53,13 @@
       "bidirectional": true
     },
     "similarity_function": {"type": "dot_product"},
-    "matcher": {
+    "matcher_fw": {
+      "is_forward": true,
+      "hidden_dim": 100,
+      "num_perspective": 20
+    },
+    "matcher_bw": {
+      "is_forward": false,
       "hidden_dim": 100,
       "num_perspective": 20
     },

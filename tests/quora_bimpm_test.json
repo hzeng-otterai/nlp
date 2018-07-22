@@ -28,7 +28,13 @@
       "num_layers": 2,
       "dropout": 0.1
     },
-    "matcher": {
+    "matcher_fw": {
+      "is_forward": true,
+      "hidden_dim": 100,
+      "num_perspective": 20
+    },
+    "matcher_bw": {
+      "is_forward": false,
       "hidden_dim": 100,
       "num_perspective": 20
     },
