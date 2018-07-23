@@ -5,12 +5,13 @@ from overrides import overrides
 import torch
 import torch.nn.functional as F
 
+from allennlp.common.checks import ConfigurationError
 from allennlp.data import Vocabulary
 from allennlp.modules import FeedForward, Seq2SeqEncoder, Seq2VecEncoder, TextFieldEmbedder
 from allennlp.models.model import Model
 from allennlp.nn import InitializerApplicator, RegularizerApplicator
 from allennlp.nn import util
-from allennlp.training.metrics import CategoricalAccuracy, F1Measure
+from allennlp.training.metrics import CategoricalAccuracy
 
 from hznlp.models.matching_layer import MatchingLayer
 
@@ -19,22 +20,43 @@ from hznlp.models.matching_layer import MatchingLayer
 class BiMPM(Model):
     def __init__(self, vocab: Vocabulary,
                  text_field_embedder: TextFieldEmbedder,
-                 encoder: Seq2SeqEncoder,
-                 matcher_fw: MatchingLayer,
-                 matcher_bw: MatchingLayer,
+                 word_matcher: MatchingLayer,
+                 encoder1: Seq2SeqEncoder,
+                 matcher_fw1: MatchingLayer,
+                 matcher_bw1: MatchingLayer,
+                 encoder2: Seq2SeqEncoder,
+                 matcher_fw2: MatchingLayer,
+                 matcher_bw2: MatchingLayer,
                  aggregator: Seq2VecEncoder,
                  classifier_feedforward: FeedForward,
                  dropout: float = 0.1,
+                 num_perspective: int = 20,
                  initializer: InitializerApplicator = InitializerApplicator(),
                  regularizer: Optional[RegularizerApplicator] = None) -> None:
         super(BiMPM, self).__init__(vocab, regularizer)
 
         self.text_field_embedder = text_field_embedder
-        self.num_classes = self.vocab.get_vocab_size("label")
-        self.encoder = encoder
-        self.matcher_fw = matcher_fw
-        self.matcher_bw = matcher_bw
+
+        self.word_matcher = word_matcher
+
+        self.encoder1 = encoder1
+        self.matcher_fw1 = matcher_fw1
+        self.matcher_bw1 = matcher_bw1
+
+        self.encoder2 = encoder2
+        self.matcher_fw2 = matcher_fw2
+        self.matcher_bw2 = matcher_bw2
+
         self.aggregator = aggregator
+
+        matching_dim = self.word_matcher.get_output_dim() + \
+                       self.matcher_fw1.get_output_dim() + self.matcher_bw1.get_output_dim() + \
+                       self.matcher_fw2.get_output_dim() + self.matcher_bw2.get_output_dim()
+
+        if matching_dim != self.aggregator.get_input_dim():
+            raise ConfigurationError("Matching dimension %d should match aggregator dimension %d" %
+                                     (matching_dim, self.aggregator.get_input_dim()))
+
         self.classifier_feedforward = classifier_feedforward
 
         self.dropout = torch.nn.Dropout(dropout)
@@ -56,21 +78,30 @@ class BiMPM(Model):
         mask_p = util.get_text_field_mask(premise)
         mask_h = util.get_text_field_mask(hypothesis)
 
+        def match_fw_bw(matcher_fw, matcher_bw, encoded_p_fw_bw, encoded_h_fw_bw):
+            dim = encoded_p_fw_bw.size(-1)
+            assert dim == encoded_h_fw_bw.size(-1)
+            encoded_p_fw, encoded_p_bw = torch.split(encoded_p_fw_bw, dim // 2, dim=-1)
+            encoded_h_fw, encoded_h_bw = torch.split(encoded_h_fw_bw, dim // 2, dim=-1)
+            mv_p_fw, mv_h_fw = matcher_fw(encoded_p_fw, mask_p, encoded_h_fw, mask_h)
+            mv_p_bw, mv_h_bw = matcher_bw(encoded_p_bw, mask_p, encoded_h_bw, mask_h)
+
+            return mv_p_fw, mv_h_fw, mv_p_bw, mv_h_bw
+
         embedded_p = self.dropout(self.text_field_embedder(premise))
-        encoded_p = self.dropout(self.encoder(embedded_p, mask_p))
+        encoded_p1 = self.dropout(self.encoder1(embedded_p, mask_p))
+        encoded_p2 = self.dropout(self.encoder2(encoded_p1, mask_p))
 
         embedded_h = self.dropout(self.text_field_embedder(hypothesis))
-        encoded_h = self.dropout(self.encoder(embedded_h, mask_h))
+        encoded_h1 = self.dropout(self.encoder1(embedded_h, mask_h))
+        encoded_h2 = self.dropout(self.encoder2(encoded_h1, mask_h))
 
-        dim = encoded_h.size(-1)
-        encoded_p_fw, encoded_p_bw = torch.split(encoded_p, dim // 2, dim=-1)
-        encoded_h_fw, encoded_h_bw = torch.split(encoded_h, dim // 2, dim=-1)
+        mv_word_p2h, mv_word_h2p = self.word_matcher(embedded_p, mask_p, embedded_h, mask_h)
+        mv_p_fw1, mv_h_fw1, mv_p_bw1, mv_h_bw1 = match_fw_bw(self.matcher_fw1, self.matcher_bw1, encoded_p1, encoded_h1)
+        mv_p_fw2, mv_h_fw2, mv_p_bw2, mv_h_bw2 = match_fw_bw(self.matcher_fw2, self.matcher_bw2, encoded_p2, encoded_h2)
 
-        mv_p_fw, mv_h_fw = self.matcher_fw(encoded_p_fw, mask_p, encoded_h_fw, mask_h)
-        mv_p_bw, mv_h_bw = self.matcher_bw(encoded_p_bw, mask_p, encoded_h_bw, mask_h)
-
-        mv_p = self.dropout(torch.cat(mv_p_fw + mv_p_bw, dim=2))
-        mv_h = self.dropout(torch.cat(mv_h_fw + mv_h_bw, dim=2))
+        mv_p = self.dropout(torch.cat(mv_word_p2h + mv_p_fw1 + mv_p_bw1 + mv_p_fw2 + mv_p_bw2, dim=2))
+        mv_h = self.dropout(torch.cat(mv_word_h2p + mv_h_fw1 + mv_h_bw1 + mv_h_fw2 + mv_h_bw2, dim=2))
 
         agg_p = self.dropout(self.aggregator(mv_p, mask_p))
         agg_h = self.dropout(self.aggregator(mv_h, mask_h))
