@@ -34,8 +34,7 @@
       "hidden_dims": [150, 75],
       "activations": ["relu", "linear"],
       "dropout": [0.25, 0]
-    },
-    "margin": 0.4
+    }
   },
   "iterator": {
     "type": "bucket",

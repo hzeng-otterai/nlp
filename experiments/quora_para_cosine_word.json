@@ -36,10 +36,9 @@
       "activations": ["tanh"],
       "dropout": [0.0]
     },
-    "margin": 0.4,
     "initializer": [
-      [".*feedforward.*weight", {"type": "xavier_normal"}],
-      [".*feedforward.*bias", {"type": "zero"}],
+      [".*linear_layers.*weight", {"type": "xavier_uniform"}],
+      [".*linear_layers.*bias", {"type": "zero"}],
       [".*weight_ih.*", {"type": "xavier_normal"}],
       [".*weight_hh.*", {"type": "orthogonal"}],
       [".*bias_ih.*", {"type": "zero"}],

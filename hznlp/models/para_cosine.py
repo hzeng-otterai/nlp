@@ -20,7 +20,7 @@ class ParaCosine(Model):
                  text_field_embedder: TextFieldEmbedder,
                  encoder: Seq2VecEncoder,
                  feedforward: FeedForwardPair,
-                 margin: float = 0.4,
+                 margin: float = 1.25,
                  initializer: InitializerApplicator = InitializerApplicator(),
                  regularizer: Optional[RegularizerApplicator] = None) -> None:
         super(ParaCosine, self).__init__(vocab, regularizer)
@@ -30,9 +30,7 @@ class ParaCosine(Model):
         self.feedforward = feedforward
         self.margin = margin
 
-        self.metrics = {
-            "accuracy": BooleanAccuracy()
-        }
+        self.accuracy = BooleanAccuracy()
 
         initializer(self)
 
@@ -53,23 +51,22 @@ class ParaCosine(Model):
 
         fc_p, fc_h = self.feedforward(encoded_p, encoded_h)
 
-        cos_sim = F.cosine_similarity(fc_p, fc_h)
-
-        prediction = cos_sim > self.margin
-        output_dict = {'similarity': cos_sim, "prediction": prediction}
+        distance = F.pairwise_distance(fc_p, fc_h)
+        prediction = distance < (self.margin / 2.0)
+        output_dict = {'distance': distance, "prediction": prediction}
 
         if label is not None:
             """
-            Cosine contrastive loss function.
-            Based on: http://anthology.aclweb.org/W16-1617
+            Contrastive loss function.
+            Based on: http://yann.lecun.com/exdb/publis/pdf/hadsell-chopra-lecun-06.pdf
             """
             y = label.float()
-            l1 = y * torch.pow((1.0 - cos_sim), 2) / 4.0
-            l2 = (1 - y) * torch.pow(cos_sim * prediction.float(), 2)
-
+            l1 = y * torch.pow(distance, 2) / 2.0
+            l2 = (1 - y) * torch.pow(torch.clamp(self.margin - distance, min=0.0), 2) / 2.0
             loss = torch.mean(l1 + l2)
-            for metric in self.metrics.values():
-                metric(prediction, label.byte())
+
+            self.accuracy(prediction, label.byte())
+
             output_dict["loss"] = loss
 
         return output_dict
@@ -87,6 +84,6 @@ class ParaCosine(Model):
 
     @overrides
     def get_metrics(self, reset: bool = False) -> Dict[str, float]:
-        return {metric_name: metric.get_metric(reset) for metric_name, metric in self.metrics.items()}
+        return {'accuracy': self.accuracy.get_metric(reset)}
 
 

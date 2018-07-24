@@ -7,41 +7,89 @@
       "word_splitter": {
         "type": "just_spaces"
       }
+    },
+    "token_indexers": {
+      "tokens": {
+        "type": "single_id",
+        "lowercase_tokens": false
+      },
+      "token_characters": {
+        "type": "characters"
+      }
     }
   },
   "train_data_path": "tests/quora_train_sample.tsv",
   "validation_data_path": "tests/quora_train_sample.tsv",
   "model": {
     "type": "bimpm",
+    "dropout": 0.15,
     "text_field_embedder": {
       "tokens": {
         "type": "embedding",
         "embedding_dim": 300,
         "trainable": false
+      },
+      "token_characters": {
+        "type": "character_encoding",
+        "embedding": {
+          "embedding_dim": 20
+        },
+        "encoder": {
+          "type": "gru",
+          "input_size": 20,
+          "hidden_size": 50,
+          "num_layers": 1,
+          "dropout": 0.1,
+          "bidirectional": true
+        }
       }
     },
-    "encoder": {
+    "word_matcher": {
+      "is_forward": true,
+      "hidden_dim": 400,
+      "num_perspective": 10,
+      "wo_full_match": true
+    },
+    "encoder1": {
       "type": "lstm",
       "bidirectional": true,
-      "input_size": 300,
-      "hidden_size": 100,
-      "num_layers": 2,
+      "input_size": 400,
+      "hidden_size": 200,
+      "num_layers": 1,
       "dropout": 0.1
     },
-    "matcher_fw": {
+    "matcher_fw1": {
       "is_forward": true,
-      "hidden_dim": 100,
-      "num_perspective": 20
+      "hidden_dim": 200,
+      "num_perspective": 10
     },
-    "matcher_bw": {
+    "matcher_bw1": {
       "is_forward": false,
-      "hidden_dim": 100,
-      "num_perspective": 20
+      "hidden_dim": 200,
+      "num_perspective": 10
+    },
+    "encoder2": {
+      "type": "lstm",
+      "bidirectional": true,
+      "input_size": 400,
+      "hidden_size": 200,
+      "num_layers": 1,
+      "dropout": 0.1
+    },
+    "matcher_fw2": {
+      "is_forward": true,
+      "hidden_dim": 200,
+      "num_perspective": 10
+    },
+    "matcher_bw2": {
+      "is_forward": false,
+      "hidden_dim": 200,
+      "num_perspective": 10
     },
     "aggregator":{
       "type": "lstm",
       "bidirectional": true,
-      "input_size": 210,
+      "input_size": 264,
       "hidden_size": 100,
       "num_layers": 2,
       "dropout": 0.1

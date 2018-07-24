@@ -13,6 +13,7 @@
   "validation_data_path": "(https://s3-us-west-1.amazonaws.com/handsomezebra/public/Quora_question_pair_partition.zip)#Quora_question_pair_partition/dev.tsv",
   "model": {
     "type": "bimpm",
+    "dropout": 0.1,
     "text_field_embedder": {
       "tokens": {
         "type": "embedding",
@@ -21,18 +22,52 @@
         "trainable": false
       }
     },
-    "encoder": {
+    "word_matcher": {
+      "is_forward": true,
+      "hidden_dim": 300,
+      "num_perspective": 10,
+      "wo_full_match": true
+    },
+    "encoder1": {
       "type": "lstm",
       "bidirectional": true,
       "input_size": 300,
-      "hidden_size": 100,
-      "num_layers": 2,
+      "hidden_size": 150,
+      "num_layers": 1,
       "dropout": 0.1
+    },
+    "matcher_fw1": {
+      "is_forward": true,
+      "hidden_dim": 150,
+      "num_perspective": 10
+    },
+    "matcher_bw1": {
+      "is_forward": false,
+      "hidden_dim": 150,
+      "num_perspective": 10
+    },
+    "encoder2": {
+      "type": "lstm",
+      "bidirectional": true,
+      "input_size": 300,
+      "hidden_size": 150,
+      "num_layers": 1,
+      "dropout": 0.1
+    },
+    "matcher_fw2": {
+      "is_forward": true,
+      "hidden_dim": 150,
+      "num_perspective": 10
+    },
+    "matcher_bw2": {
+      "is_forward": false,
+      "hidden_dim": 150,
+      "num_perspective": 10
     },
     "aggregator":{
       "type": "lstm",
       "bidirectional": true,
-      "input_size": 210,
+      "input_size": 264,
       "hidden_size": 100,
       "num_layers": 2,
       "dropout": 0.1
@@ -45,11 +80,12 @@
       "dropout": [0.1, 0.0]
     },
     "initializer": [
-        [".*linear_layers.*weight", {"type": "xavier_normal"}],
-        [".*linear_layers.*bias", {"type": "constant", "val": 0}],
-        [".*weight_ih.*", {"type": "xavier_normal"}],
-        [".*weight_hh.*", {"type": "orthogonal"}],
-        [".*bias.*", {"type": "constant", "val": 0}]
+      [".*linear_layers.*weight", {"type": "xavier_normal"}],
+      [".*linear_layers.*bias", {"type": "constant", "val": 0}],
+      [".*weight_ih.*", {"type": "xavier_normal"}],
+      [".*weight_hh.*", {"type": "orthogonal"}],
+      [".*bias.*", {"type": "constant", "val": 0}],
+      [".*matcher.*params.*", {"type": "kaiming_normal"}]
     ]
   },
   "iterator": {

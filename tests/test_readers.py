@@ -10,7 +10,7 @@ class TestQuoraParaphraseDatasetReader(AllenNlpTestCase):
         reader = QuoraParaphraseDatasetReader()
         instances = ensure_list(reader.read('tests/quora_train_sample.tsv'))
 
-        assert len(instances) == 10
+        assert len(instances) == 12
         for x in instances:
             for f in ["label", "premise", "hypothesis"]:
                 assert f in x.fields

@@ -1,3 +1,9 @@
+"""
+BiMPM (Bilateral Multi-Perspective Matching) model implementation.
+Paper according to https://arxiv.org/pdf/1702.03814
+Implementation according to https://github.com/zhiguowang/BiMPM/
+"""
+
 from typing import Dict, Optional
 
 import numpy

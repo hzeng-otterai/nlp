@@ -150,32 +150,12 @@ class ESIMCosine(Model):
 
         # Shape: (batch_size, output_feedforward_hidden_dim)
         output_p, output_h = self._output_feedforward(pooled_p_all, pooled_h_all)
-        
-        #cos_sim = F.cosine_similarity(output_p, output_h)
-        #prediction = cos_sim > self._margin
-        #output_dict = {'similarity': cos_sim, "prediction": prediction}
+
         distance = F.pairwise_distance(output_p, output_h)
         prediction = distance < (self._margin / 2.0)
         output_dict = {'distance': distance, "prediction": prediction}
 
         if label is not None:
-        
-            """
-            Cosine plus MSE loss
-            """
-            # convert to -1 and 1
-            # new_label = label * 2 - 1
-            # loss_func = torch.nn.MSELoss()
-            # loss = loss_func(cos_sim, new_label.float())
-
-            """
-            Cosine contrastive loss function.
-            Based on: http://anthology.aclweb.org/W16-1617
-            """
-            #y = label.float()
-            #l1 = y * torch.pow((1.0 - cos_sim), 2) / 4.0
-            #l2 = (1 - y) * torch.pow(cos_sim.clamp(min=0), 2)
-            #loss = torch.mean(l1 + l2)
             
             """
             Contrastive loss function.
