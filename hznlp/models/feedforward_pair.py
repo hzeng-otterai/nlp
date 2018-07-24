@@ -63,8 +63,8 @@ class FeedForwardPair(torch.nn.Module):
         straight_layers = []
         cross_layers = []
         for layer_input_dim, layer_output_dim in zip(input_dims, hidden_dims):
-            straight_layers.append(torch.nn.Linear(layer_input_dim, layer_output_dim))
-            cross_layers.append(torch.nn.Linear(layer_input_dim, layer_output_dim))
+            straight_layers.append(torch.nn.Linear(layer_input_dim, layer_output_dim, bias=False))
+            cross_layers.append(torch.nn.Linear(layer_input_dim, layer_output_dim, bias=False))
         self._straight_linear_layers = torch.nn.ModuleList(straight_layers)
         self._cross_linear_layers = torch.nn.ModuleList(cross_layers)
         dropout_layers = [torch.nn.Dropout(p=value) for value in dropout]
