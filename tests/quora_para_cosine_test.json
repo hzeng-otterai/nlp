@@ -17,7 +17,8 @@
       "tokens": {
         "type": "embedding",
         "embedding_dim": 300,
-        "trainable": false
+        "trainable": false,
+        "padding_index": 0
       }
     },
     "encoder": {

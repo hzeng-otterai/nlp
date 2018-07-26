@@ -28,12 +28,14 @@
         "type": "embedding",
         "pretrained_file": "https://s3-us-west-2.amazonaws.com/allennlp/datasets/glove/glove.840B.300d.txt.gz",
         "embedding_dim": 300,
-        "trainable": false
+        "trainable": false,
+        "padding_index": 0
       },
       "token_characters": {
         "type": "character_encoding",
         "embedding": {
-          "embedding_dim": 20
+          "embedding_dim": 20,
+          "padding_index": 0
         },
         "encoder": {
           "type": "gru",
