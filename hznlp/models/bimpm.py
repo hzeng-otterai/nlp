@@ -36,7 +36,6 @@ class BiMPM(Model):
                  aggregator: Seq2VecEncoder,
                  classifier_feedforward: FeedForward,
                  dropout: float = 0.1,
-                 num_perspective: int = 20,
                  initializer: InitializerApplicator = InitializerApplicator(),
                  regularizer: Optional[RegularizerApplicator] = None) -> None:
         super(BiMPM, self).__init__(vocab, regularizer)

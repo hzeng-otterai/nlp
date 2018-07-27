@@ -22,7 +22,7 @@
   "validation_data_path": "(https://s3-us-west-1.amazonaws.com/handsomezebra/public/Quora_question_pair_partition.zip)#Quora_question_pair_partition/dev.tsv",
   "model": {
     "type": "bimpm",
-    "dropout": 0.15,
+    "dropout": 0.1,
     "text_field_embedder": {
       "tokens": {
         "type": "embedding",
@@ -127,7 +127,7 @@
     "validation_metric": "+accuracy",
     "optimizer": {
       "type": "adam",
-      "lr": 0.001
+      "lr": 0.0005
     }
   }
 }
