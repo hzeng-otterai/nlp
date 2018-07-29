@@ -4,7 +4,7 @@ Paper according to https://arxiv.org/pdf/1702.03814
 Implementation according to https://github.com/zhiguowang/BiMPM/
 """
 
-from typing import Dict, Optional
+from typing import Dict, Optional, List, Any
 
 import numpy
 from overrides import overrides
@@ -78,7 +78,9 @@ class BiMPM(Model):
     def forward(self,  # type: ignore
                 premise: Dict[str, torch.LongTensor],
                 hypothesis: Dict[str, torch.LongTensor],
-                label: torch.LongTensor = None) -> Dict[str, torch.Tensor]:
+                label: torch.LongTensor = None,
+                metadata: List[Dict[str, Any]] = None  # pylint:disable=unused-argument
+                ) -> Dict[str, torch.Tensor]:
 
         mask_p = util.get_text_field_mask(premise)
         mask_h = util.get_text_field_mask(hypothesis)
