@@ -23,7 +23,7 @@ sys.argv = [
     "allennlp",  # command name, not used by main
     "evaluate",
     model_path,
-    "--evaluation-data-file", test_file,
+    test_file,
     "--include-package", "hznlp",
     "--cuda-device", "0"
 ]
