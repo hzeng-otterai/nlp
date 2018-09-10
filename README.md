@@ -2,7 +2,7 @@
 
 ## Requirements
  - Python 3.6 (Anaconda preferred)
- - PyTorch 0.4.0
+ - PyTorch 0.4.1
  - AllenNLP latest (`pip install git+git://github.com/allenai/allennlp.git`)
 
 ## Steps to reproduce
@@ -11,7 +11,4 @@
  3. python predict.py
  4. ./webdemo.sh
 
-## Algorithms
- - BiMPM
- - ParaClassification
 

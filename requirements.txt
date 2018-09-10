@@ -1,4 +1,4 @@
-allennlp==0.5.2-unreleased
+allennlp
 pytest
 pytest-pythonpath
 

@@ -1,1 +1,0 @@
-from hznlp.predictors.sentence_pair_predictor import SentencePairPredictor

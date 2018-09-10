@@ -16,7 +16,7 @@ if __name__ == "__main__":
     # Specify overrides
     overrides = json.dumps({
         "iterator": {"batch_size": 64},
-        "trainer": {"cuda_device": 0}
+        "trainer": {"cuda_device": -1}
     })
 
     # Specify output dir according to current time

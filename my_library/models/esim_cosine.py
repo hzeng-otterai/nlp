@@ -13,7 +13,7 @@ from allennlp.nn import InitializerApplicator, RegularizerApplicator
 from allennlp.nn.util import get_text_field_mask, last_dim_softmax, weighted_sum, replace_masked_values
 from allennlp.training.metrics import BooleanAccuracy, CategoricalAccuracy
 
-from hznlp.models.feedforward_pair import FeedForwardPair
+from my_library.models.feedforward_pair import FeedForwardPair
 
 
 @Model.register("esim_cosine")

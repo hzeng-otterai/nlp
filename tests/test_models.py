@@ -1,6 +1,8 @@
 # pylint: disable=invalid-name,protected-access
 from allennlp.common.testing import ModelTestCase
 
+from my_library import *
+
 
 class BiMPMTest(ModelTestCase):
     def setUp(self):

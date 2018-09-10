@@ -9,8 +9,8 @@
       }
     }
   },
-  "train_data_path": "(https://s3-us-west-1.amazonaws.com/handsomezebra/public/Quora_question_pair_partition.zip)#Quora_question_pair_partition/train.tsv",
-  "validation_data_path": "(https://s3-us-west-1.amazonaws.com/handsomezebra/public/Quora_question_pair_partition.zip)#Quora_question_pair_partition/dev.tsv",
+  "train_data_path": "https://s3-us-west-2.amazonaws.com/allennlp/datasets/quora-question-paraphrase/train.tsv",
+  "validation_data_path": "https://s3-us-west-2.amazonaws.com/allennlp/datasets/quora-question-paraphrase/dev.tsv",
   "model": {
     "type": "bimpm",
     "dropout": 0.1,
@@ -23,11 +23,11 @@
         "padding_index": 0
       }
     },
-    "word_matcher": {
+    "matcher_word": {
       "is_forward": true,
       "hidden_dim": 300,
-      "num_perspective": 10,
-      "wo_full_match": true
+      "num_perspectives": 10,
+      "with_full_match": false
     },
     "encoder1": {
       "type": "lstm",
@@ -37,15 +37,15 @@
       "num_layers": 1,
       "dropout": 0.1
     },
-    "matcher_fw1": {
+    "matcher_forward1": {
       "is_forward": true,
       "hidden_dim": 150,
-      "num_perspective": 10
+      "num_perspectives": 10
     },
-    "matcher_bw1": {
+    "matcher_backward1": {
       "is_forward": false,
       "hidden_dim": 150,
-      "num_perspective": 10
+      "num_perspectives": 10
     },
     "encoder2": {
       "type": "lstm",
@@ -55,15 +55,15 @@
       "num_layers": 1,
       "dropout": 0.1
     },
-    "matcher_fw2": {
+    "matcher_forward2": {
       "is_forward": true,
       "hidden_dim": 150,
-      "num_perspective": 10
+      "num_perspectives": 10
     },
-    "matcher_bw2": {
+    "matcher_backward2": {
       "is_forward": false,
       "hidden_dim": 150,
-      "num_perspective": 10
+      "num_perspectives": 10
     },
     "aggregator":{
       "type": "lstm",
@@ -86,7 +86,7 @@
       [".*weight_ih.*", {"type": "xavier_normal"}],
       [".*weight_hh.*", {"type": "orthogonal"}],
       [".*bias.*", {"type": "constant", "val": 0}],
-      [".*matcher.*params.*", {"type": "kaiming_normal"}]
+      [".*matcher.*match_weights.*", {"type": "kaiming_normal"}]
     ]
   },
   "iterator": {

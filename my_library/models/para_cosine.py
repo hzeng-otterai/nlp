@@ -11,7 +11,7 @@ from allennlp.nn import InitializerApplicator, RegularizerApplicator
 from allennlp.nn import util
 from allennlp.training.metrics import BooleanAccuracy
 
-from hznlp.models.feedforward_pair import FeedForwardPair
+from my_library.models.feedforward_pair import FeedForwardPair
 
 
 @Model.register("para_cosine")
