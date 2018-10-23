@@ -17,26 +17,27 @@
     "type": "bimpm",
     "dropout": 0.1,
     "text_field_embedder": {
-      "tokens": {
-        "type": "embedding",
-        "pretrained_file": "https://s3-us-west-2.amazonaws.com/allennlp/datasets/glove/glove.840B.300d.txt.gz",
-        "embedding_dim": 300,
-        "trainable": false,
-        "padding_index": 0
-      },
-      "token_characters": {
-        "type": "character_encoding",
-        "embedding": {
-          "embedding_dim": 20,
+      "token_embedders": {
+        "tokens": {
+          "type": "embedding",
+          "pretrained_file": "https://s3-us-west-2.amazonaws.com/allennlp/datasets/glove/glove.840B.300d.txt.gz",
+          "embedding_dim": 300,
+          "trainable": false,
           "padding_index": 0
         },
-        "encoder": {
-          "type": "gru",
-          "input_size": 20,
-          "hidden_size": 50,
-          "num_layers": 1,
-          "dropout": 0.1,
-          "bidirectional": true
+        "token_characters": {
+          "type": "character_encoding",
+          "embedding": {
+            "embedding_dim": 20,
+            "padding_index": 0
+          },
+          "encoder": {
+            "type": "gru",
+            "input_size": 20,
+            "hidden_size": 50,
+            "num_layers": 1,
+            "bidirectional": true
+          }
         }
       }
     },
@@ -51,10 +52,9 @@
       "bidirectional": true,
       "input_size": 400,
       "hidden_size": 200,
-      "num_layers": 1,
-      "dropout": 0.1
+      "num_layers": 1
     },
-    "matcher_foward1": {
+    "matcher_forward1": {
       "is_forward": true,
       "hidden_dim": 200,
       "num_perspectives": 10
@@ -69,8 +69,7 @@
       "bidirectional": true,
       "input_size": 400,
       "hidden_size": 200,
-      "num_layers": 1,
-      "dropout": 0.1
+      "num_layers": 1
     },
     "matcher_forward2": {
       "is_forward": true,

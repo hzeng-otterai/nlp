@@ -10,7 +10,7 @@ from allennlp.modules import FeedForward, InputVariationalDropout
 from allennlp.modules.matrix_attention.legacy_matrix_attention import LegacyMatrixAttention
 from allennlp.modules import Seq2SeqEncoder, SimilarityFunction, TextFieldEmbedder
 from allennlp.nn import InitializerApplicator, RegularizerApplicator
-from allennlp.nn.util import get_text_field_mask, last_dim_softmax, weighted_sum, replace_masked_values
+from allennlp.nn.util import get_text_field_mask, masked_softmax, weighted_sum, replace_masked_values
 from allennlp.training.metrics import BooleanAccuracy, CategoricalAccuracy
 
 from my_library.models.feedforward_pair import FeedForwardPair
@@ -62,96 +62,96 @@ class ESIMCosine(Model):
                 label: torch.IntTensor = None) -> Dict[str, torch.Tensor]:
 
         # Shape: (batch_size, seq_length, embedding_dim)
-        embedded_p = self._text_field_embedder(premise)
-        embedded_h = self._text_field_embedder(hypothesis)
+        embedded_premise = self._text_field_embedder(premise)
+        embedded_hypothesis = self._text_field_embedder(hypothesis)
         
-        mask_p = get_text_field_mask(premise).float()
-        mask_h = get_text_field_mask(hypothesis).float()
+        mask_premise = get_text_field_mask(premise).float()
+        mask_hypothesis = get_text_field_mask(hypothesis).float()
 
         # apply dropout for LSTM
         if self.rnn_input_dropout:
-            embedded_p = self.rnn_input_dropout(embedded_p)
-            embedded_h = self.rnn_input_dropout(embedded_h)
+            embedded_premise = self.rnn_input_dropout(embedded_premise)
+            embedded_hypothesis = self.rnn_input_dropout(embedded_hypothesis)
 
-        # encode p and h
+        # encode premise and hypothesis
         # Shape: (batch_size, seq_length, encoding_direction_num * encoding_hidden_dim)
-        encoded_p = self._encoder(embedded_p, mask_p)
-        encoded_h = self._encoder(embedded_h, mask_h)
+        encoded_premise = self._encoder(embedded_premise, mask_premise)
+        encoded_hypothesis = self._encoder(embedded_hypothesis, mask_hypothesis)
 
         # Shape: (batch_size, p_length, h_length)
-        similarity_matrix = self._matrix_attention(encoded_p, encoded_h)
+        similarity_matrix = self._matrix_attention(encoded_premise, encoded_hypothesis)
 
         # Shape: (batch_size, p_length, h_length)
-        p2h_attention = last_dim_softmax(similarity_matrix, mask_h)
+        p2h_attention = masked_softmax(similarity_matrix, mask_hypothesis)
         # Shape: (batch_size, p_length, encoding_direction_num * encoding_hidden_dim)
-        attended_h = weighted_sum(encoded_h, p2h_attention)
+        attended_hypothesis = weighted_sum(encoded_hypothesis, p2h_attention)
 
         # Shape: (batch_size, h_length, p_length)
-        h2p_attention = last_dim_softmax(similarity_matrix.transpose(1, 2).contiguous(), mask_p)
+        h2p_attention = masked_softmax(similarity_matrix.transpose(1, 2).contiguous(), mask_premise)
         # Shape: (batch_size, h_length, encoding_direction_num * encoding_hidden_dim)
-        attended_p = weighted_sum(encoded_p, h2p_attention)
+        attended_premise = weighted_sum(encoded_premise, h2p_attention)
 
         # the "enhancement" layer
         # Shape: (batch_size, p_length, encoding_direction_num * encoding_hidden_dim * 4 + num_perspective * num_matching)
-        enhanced_p = torch.cat(
-                [encoded_p, attended_h,
-                 encoded_p - attended_h,
-                 encoded_p * attended_h],
+        enhanced_premise = torch.cat(
+                [encoded_premise, attended_hypothesis,
+                 encoded_premise - attended_hypothesis,
+                 encoded_premise * attended_hypothesis],
                 dim=-1
         )
         # Shape: (batch_size, h_length, encoding_direction_num * encoding_hidden_dim * 4 + num_perspective * num_matching)
-        enhanced_h = torch.cat(
-                [encoded_h, attended_p,
-                 encoded_h - attended_p,
-                 encoded_h * attended_p],
+        enhanced_hypothesis = torch.cat(
+                [encoded_hypothesis, attended_premise,
+                 encoded_hypothesis - attended_premise,
+                 encoded_hypothesis * attended_premise],
                 dim=-1
         )
 
         # The projection layer down to the model dimension.  Dropout is not applied before
         # projection.
         # Shape: (batch_size, seq_length, projection_hidden_dim)
-        projected_enhanced_p = self._projection_feedforward(enhanced_p)
-        projected_enhanced_h = self._projection_feedforward(enhanced_h)
+        projected_enhanced_premise = self._projection_feedforward(enhanced_premise)
+        projected_enhanced_hypothesis = self._projection_feedforward(enhanced_hypothesis)
 
         # Run the inference layer
         if self.rnn_input_dropout:
-            projected_enhanced_p = self.rnn_input_dropout(projected_enhanced_p)
-            projected_enhanced_h = self.rnn_input_dropout(projected_enhanced_h)
+            projected_enhanced_premise = self.rnn_input_dropout(projected_enhanced_premise)
+            projected_enhanced_hypothesis = self.rnn_input_dropout(projected_enhanced_hypothesis)
             
         # Shape: (batch_size, seq_length, inference_direction_num * inference_hidden_dim)
-        inferenced_p = self._inference_encoder(projected_enhanced_p, mask_p)
-        inferenced_h = self._inference_encoder(projected_enhanced_h, mask_h)
+        inferenced_premise = self._inference_encoder(projected_enhanced_premise, mask_premise)
+        inferenced_hypothesis = self._inference_encoder(projected_enhanced_hypothesis, mask_hypothesis)
 
         # The pooling layer -- max and avg pooling.
         # Shape: (batch_size, inference_direction_num * inference_hidden_dim)
-        pooled_p_max, _ = replace_masked_values(
-                inferenced_p, mask_p.unsqueeze(-1), -1e7
+        pooled_premise_max, _ = replace_masked_values(
+                inferenced_premise, mask_premise.unsqueeze(-1), -1e7
         ).max(dim=1)
-        pooled_h_max, _ = replace_masked_values(
-                inferenced_h, mask_h.unsqueeze(-1), -1e7
+        pooled_hypothesis_max, _ = replace_masked_values(
+                inferenced_hypothesis, mask_hypothesis.unsqueeze(-1), -1e7
         ).max(dim=1)
 
-        pooled_p_avg = torch.sum(inferenced_p * mask_p.unsqueeze(-1), dim=1) / torch.sum(
-                mask_p, 1, keepdim=True
+        pooled_premise_avg = torch.sum(inferenced_premise * mask_premise.unsqueeze(-1), dim=1) / torch.sum(
+                mask_premise, 1, keepdim=True
         )
-        pooled_h_avg = torch.sum(inferenced_h * mask_h.unsqueeze(-1), dim=1) / torch.sum(
-                mask_h, 1, keepdim=True
+        pooled_hypothesis_avg = torch.sum(inferenced_hypothesis * mask_hypothesis.unsqueeze(-1), dim=1) / torch.sum(
+                mask_hypothesis, 1, keepdim=True
         )
 
         # Now concat
         # Shape: (batch_size, inference_direction_num * inference_hidden_dim * 2)
-        pooled_p_all = torch.cat([pooled_p_avg, pooled_p_max], dim=1)
-        pooled_h_all = torch.cat([pooled_h_avg, pooled_h_max], dim=1)
+        pooled_premise_all = torch.cat([pooled_premise_avg, pooled_premise_max], dim=1)
+        pooled_hypothesis_all = torch.cat([pooled_hypothesis_avg, pooled_hypothesis_max], dim=1)
 
         # the final MLP -- apply dropout to input, and MLP applies to output & hidden
         if self.dropout:
-            pooled_p_all = self.dropout(pooled_p_all)
-            pooled_h_all = self.dropout(pooled_h_all)
+            pooled_premise_all = self.dropout(pooled_premise_all)
+            pooled_hypothesis_all = self.dropout(pooled_hypothesis_all)
 
         # Shape: (batch_size, output_feedforward_hidden_dim)
-        output_p, output_h = self._output_feedforward(pooled_p_all, pooled_h_all)
+        output_premise, output_hypothesis = self._output_feedforward(pooled_premise_all, pooled_hypothesis_all)
 
-        distance = F.pairwise_distance(output_p, output_h)
+        distance = F.pairwise_distance(output_premise, output_hypothesis)
         prediction = distance < (self._margin / 2.0)
         output_dict = {'distance': distance, "prediction": prediction}
 

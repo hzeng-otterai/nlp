@@ -14,11 +14,13 @@
   "model": {
     "type": "para_cosine",
     "text_field_embedder": {
-      "tokens": {
-        "type": "embedding",
-        "embedding_dim": 300,
-        "trainable": false,
-        "padding_index": 0
+      "token_embedders": {
+        "tokens": {
+          "type": "embedding",
+          "embedding_dim": 300,
+          "trainable": false,
+          "padding_index": 0
+        }
       }
     },
     "encoder": {
@@ -26,8 +28,7 @@
       "bidirectional": true,
       "input_size": 300,
       "hidden_size": 100,
-      "num_layers": 2,
-      "dropout": 0.1
+      "num_layers": 2
     },
     "feedforward": {
       "input_dim": 200,

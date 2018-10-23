@@ -20,12 +20,14 @@
     "type": "bimpm",
     "dropout": 0.1,
     "text_field_embedder": {
-      "elmo": {
-        "type": "elmo_token_embedder",
-        "dropout": 0.2,
-        "options_file": "https://s3-us-west-2.amazonaws.com/allennlp/models/elmo/2x4096_512_2048cnn_2xhighway/elmo_2x4096_512_2048cnn_2xhighway_options.json",
-        "weight_file": "https://s3-us-west-2.amazonaws.com/allennlp/models/elmo/2x4096_512_2048cnn_2xhighway/elmo_2x4096_512_2048cnn_2xhighway_weights.hdf5",
-        "do_layer_norm": false
+      "token_embedders": {
+        "elmo": {
+          "type": "elmo_token_embedder",
+          "dropout": 0.2,
+          "options_file": "https://s3-us-west-2.amazonaws.com/allennlp/models/elmo/2x4096_512_2048cnn_2xhighway/elmo_2x4096_512_2048cnn_2xhighway_options.json",
+          "weight_file": "https://s3-us-west-2.amazonaws.com/allennlp/models/elmo/2x4096_512_2048cnn_2xhighway/elmo_2x4096_512_2048cnn_2xhighway_weights.hdf5",
+          "do_layer_norm": false
+        }
       }
     },
     "matcher_word": {
@@ -39,8 +41,7 @@
       "bidirectional": true,
       "input_size": 1024,
       "hidden_size": 200,
-      "num_layers": 1,
-      "dropout": 0.1
+      "num_layers": 1
     },
     "matcher_forward1": {
       "is_forward": true,
@@ -57,8 +58,7 @@
       "bidirectional": true,
       "input_size": 400,
       "hidden_size": 200,
-      "num_layers": 1,
-      "dropout": 0.1
+      "num_layers": 1
     },
     "matcher_forward2": {
       "is_forward": true,
