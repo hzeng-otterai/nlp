@@ -56,7 +56,7 @@
     "output_logit": {
       "input_dim": 300,
       "num_layers": 1,
-      "hidden_dims": 2,
+      "hidden_dims": 3,
       "activations": "linear"
     },
      "initializer": [
