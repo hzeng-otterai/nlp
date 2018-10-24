@@ -6,9 +6,9 @@
  - AllenNLP latest (`pip install git+git://github.com/allenai/allennlp.git`)
 
 ## Steps to reproduce
- 1. python train.py
- 2. python evaluate.py
- 3. python predict.py
- 4. ./webdemo.sh
+ 1. `python scripts/train.py <input_config_file>`
+ 2. `python scripts/evaluate.py`
+ 3. `python scripts/predict.py`
+ 4. `scripts/webdemo.sh`
 
 
