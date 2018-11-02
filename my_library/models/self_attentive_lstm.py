@@ -180,7 +180,7 @@ class SelfAttentiveLstm(Seq2SeqEncoder):
             self.rnn_input_dropout = None
 
     def get_input_dim(self):
-        return self._encoder.get_input_dim()
+        return self._lstm_encoder.get_input_dim()
 
     def get_output_dim(self):
         return self._projection_feedforward.get_output_dim()
