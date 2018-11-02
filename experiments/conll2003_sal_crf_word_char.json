@@ -49,28 +49,27 @@
             "bidirectional": true
           }
         }
-       },
+       }
     },
     "encoder": {
       "type": "self_attentive_lstm",
-      "dropout": 0.2,
-      "encoder1": {
+      "dropout": 0.5,
+      "lstm_encoder": {
         "type": "lstm",
         "input_size": 300 + 100,
         "hidden_size": 200,
         "num_layers": 1,
         "bidirectional": true
       },
-      "encoder2": {
-        "type": "lstm",
-        "input_size": 300 + 100,
-        "hidden_size": 200,
-        "num_layers": 1,
-        "bidirectional": true
+      "self_attention_encoder": {
+        "type": "multi_head_self_attention",
+        "num_heads": 8,
+        "input_dim": 400,
+        "attention_dim": 200,
+        "values_dim": 240
       },
-      "similarity_function": {"type": "dot_product"},
       "projection_feedforward": {
-        "input_dim": 1600,
+        "input_dim": 1200,
         "hidden_dims": 200,
         "num_layers": 1,
         "activations": "relu"
