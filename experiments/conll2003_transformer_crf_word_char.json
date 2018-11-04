@@ -1,0 +1,85 @@
+// Configuration for a named entity recognization model based on:
+//   Peters, Matthew E. et al. “Deep contextualized word representations.” NAACL-HLT (2018).
+{
+  "dataset_reader": {
+    "type": "conll2003",
+    "tag_label": "ner",
+    "coding_scheme": "BIOUL",
+    "token_indexers": {
+      "tokens": {
+        "type": "single_id",
+        "lowercase_tokens": false
+      },
+      "token_characters": {
+        "type": "characters"
+      },
+    }
+  },
+  "train_data_path": std.extVar("NER_TRAIN_DATA_PATH"),
+  "validation_data_path": std.extVar("NER_TEST_A_PATH"),
+  "test_data_path": std.extVar("NER_TEST_B_PATH"),
+  "evaluate_on_test": true,
+  "model": {
+    "type": "crf_tagger",
+    "label_encoding": "BIOUL",
+    "constrain_crf_decoding": true,
+    "calculate_span_f1": true,
+    "dropout": 0.5,
+    "include_start_end_transitions": false,
+    "text_field_embedder": {
+      "token_embedders": {
+        "tokens": {
+          "type": "embedding",
+          "embedding_dim": 300,
+          "pretrained_file": "https://s3-us-west-2.amazonaws.com/allennlp/datasets/glove/glove.840B.300d.txt.gz",
+          "trainable": false,
+          "padding_index": 0
+        },
+        "token_characters": {
+          "type": "character_encoding",
+          "embedding": {
+            "embedding_dim": 20,
+            "padding_index": 0
+          },
+          "encoder": {
+            "type": "lstm",
+            "input_size": 20,
+            "hidden_size": 50,
+            "num_layers": 1,
+            "bidirectional": true
+          }
+        }
+       }
+    },
+    "encoder": {
+      "type": "transformer",
+      "hidden_dim": 400
+    },
+    "initializer": [
+        [".*projection.*weight", {"type": "xavier_uniform"}],
+        [".*projection.*bias", {"type": "zero"}],
+        [".*linear_layers.*weight", {"type": "xavier_uniform"}],
+        [".*linear_layers.*bias", {"type": "zero"}],
+        [".*weight_ih.*", {"type": "xavier_uniform"}],
+        [".*weight_hh.*", {"type": "orthogonal"}],
+        [".*bias_ih.*", {"type": "zero"}],
+        [".*bias_hh.*", {"type": "lstm_hidden_bias"}]
+    ]
+  },
+  "iterator": {
+    "type": "basic",
+    "batch_size": 64
+  },
+  "trainer": {
+    "optimizer": {
+        "type": "adam",
+        "lr": 0.001
+    },
+    "validation_metric": "+f1-measure-overall",
+    "num_serialized_models_to_keep": 3,
+    "num_epochs": 75,
+    "grad_norm": 5.0,
+    "patience": 25,
+    "cuda_device": 0
+  }
+}
