@@ -56,14 +56,10 @@
       "hidden_dim": 400
     },
     "initializer": [
-        [".*projection.*weight", {"type": "xavier_uniform"}],
-        [".*projection.*bias", {"type": "zero"}],
-        [".*linear_layers.*weight", {"type": "xavier_uniform"}],
-        [".*linear_layers.*bias", {"type": "zero"}],
-        [".*weight_ih.*", {"type": "xavier_uniform"}],
-        [".*weight_hh.*", {"type": "orthogonal"}],
-        [".*bias_ih.*", {"type": "zero"}],
-        [".*bias_hh.*", {"type": "lstm_hidden_bias"}]
+      [".*weight_ih.*", {"type": "xavier_uniform"}],
+      [".*weight_hh.*", {"type": "orthogonal"}],
+      [".*bias_ih.*", {"type": "zero"}],
+      [".*bias_hh.*", {"type": "lstm_hidden_bias"}]
     ]
   },
   "iterator": {

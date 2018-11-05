@@ -147,6 +147,27 @@ class TransformerBlock(nn.Module):
         return self.dropout(x)
 
 
+class PositionalEmbedding(nn.Module):
+
+    def __init__(self, d_model, max_len=512):
+        super().__init__()
+
+        # Compute the positional encodings once in log space.
+        pe = torch.zeros(max_len, d_model).float()
+        pe.require_grad = False
+
+        position = torch.arange(0, max_len).float().unsqueeze(1)
+        div_term = (torch.arange(0, d_model, 2) * -(math.log(10000.0) / d_model)).float().exp()
+
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+
+        pe = pe.unsqueeze(0)
+        self.register_buffer('pe', pe)
+
+    def forward(self, x):
+        return self.pe[:, :x.size(1)]
+
 @Seq2SeqEncoder.register("transformer")
 class Transformer(Seq2SeqEncoder):
     def __init__(self,
@@ -157,6 +178,8 @@ class Transformer(Seq2SeqEncoder):
         super(Transformer, self).__init__()
 
         self._hidden_dim = hidden_dim
+
+        self._position_embedding = PositionalEmbedding(d_model=hidden_dim)
 
         self._transformer_blocks = nn.ModuleList(
             [TransformerBlock(hidden_dim, num_heads, hidden_dim * 4, dropout) for _ in range(num_layers)])
@@ -189,11 +212,14 @@ class Transformer(Seq2SeqEncoder):
         where output_projection_dim = input_dim by default.
         """
 
-        mask = (mask.unsqueeze(-1) * mask.unsqueeze(-2)).unsqueeze(1)
+        # (batch_size, 1, timesteps, timesteps)
+        pos_embedding = self._position_embedding(inputs)
 
-        outputs = inputs
+        expanded_mask = (mask.unsqueeze(-1) * mask.unsqueeze(-2)).unsqueeze(1)
+
+        outputs = (inputs + pos_embedding) * mask.unsqueeze(-1).float()
         for transformer in self._transformer_blocks:
-            outputs = transformer.forward(outputs, mask)
+            outputs = transformer.forward(outputs, expanded_mask)
 
         return outputs
 
