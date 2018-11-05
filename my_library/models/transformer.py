@@ -11,7 +11,6 @@ class LayerNorm(nn.Module):
     """
     Construct a layernorm module (See citation for details).
     """
-
     def __init__(self, features, eps=1e-6):
         super(LayerNorm, self).__init__()
         self.a_2 = nn.Parameter(torch.ones(features))
@@ -19,6 +18,16 @@ class LayerNorm(nn.Module):
         self.eps = eps
 
     def forward(self, x):
+        """
+        Parameters
+        ----------
+        x : ``torch.FloatTensor``, required.
+            A tensor of shape (batch_size, timesteps, input_dim)
+
+        Returns
+        -------
+        A tensor of shape (batch_size, timesteps, input_dim)
+        """
         mean = x.mean(-1, keepdim=True)
         std = x.std(-1, keepdim=True)
         return self.a_2 * (x - mean) / (std + self.eps) + self.b_2
@@ -36,7 +45,19 @@ class SublayerConnection(nn.Module):
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, x, sublayer):
-        "Apply residual connection to any sublayer with the same size."
+        """
+        Apply residual connection to any sublayer with the same size.
+
+        Parameters
+        ----------
+        x : ``torch.FloatTensor``, required.
+            A tensor of shape (batch_size, timesteps, input_dim)
+        sublayer : sublayer to convert input to output of the same shape
+
+        Returns
+        -------
+        A tensor of shape (batch_size, timesteps, input_dim)
+        """
         return x + self.dropout(sublayer(self.norm(x)))
 
 
@@ -46,6 +67,24 @@ class Attention(nn.Module):
     """
 
     def forward(self, query, key, value, mask=None, dropout=None):
+        """
+        Parameters
+        ----------
+        query : ``torch.FloatTensor``, required.
+            A tensor of shape (batch_size, heads, timesteps, input_dim_per_head)
+        key : ``torch.FloatTensor``, required.
+            A tensor of shape (batch_size, heads, timesteps, input_dim_per_head)
+        value : ``torch.FloatTensor``, required.
+            A tensor of shape (batch_size, heads, timesteps, input_dim_per_head)
+        mask : ``torch.FloatTensor``, optional (default = None).
+            A tensor of shape (batch_size, 1, timesteps, timesteps).
+
+        Returns
+        -------
+        A tuple of (result, attention)
+        result: A tensor of shape (batch_size, heads, timesteps, input_dim_per_head)
+        attention: A tensor of shape (batch_size, heads, timesteps, timesteps)
+        """
         scores = torch.matmul(query, key.transpose(-2, -1)) \
                  / math.sqrt(query.size(-1))
 
@@ -80,18 +119,39 @@ class MultiHeadedAttention(nn.Module):
         self.dropout = nn.Dropout(p=dropout)
 
     def forward(self, query, key, value, mask=None):
+        """
+        Parameters
+        ----------
+        query : ``torch.FloatTensor``, required.
+            A tensor of shape (batch_size, timesteps, input_dim)
+        key : ``torch.FloatTensor``, required.
+            A tensor of shape (batch_size, timesteps, input_dim)
+        value : ``torch.FloatTensor``, required.
+            A tensor of shape (batch_size, timesteps, input_dim)
+        mask : ``torch.FloatTensor``, optional (default = None).
+            A tensor of shape (batch_size, 1, timesteps, timesteps).
+
+        Returns
+        -------
+        A tensor of shape (batch_size, timesteps, output_projection_dim),
+        where output_projection_dim = input_dim by default.
+        """
         batch_size = query.size(0)
 
         # 1) Do all the linear projections in batch from d_model => h x d_k
+        # query, key, value: tensors of shape (batch_size, heads, timesteps, input_dim_per_head)
         query, key, value = [l(x).view(batch_size, -1, self.h, self.d_k).transpose(1, 2)
                              for l, x in zip(self.linear_layers, (query, key, value))]
 
         # 2) Apply attention on all the projected vectors in batch.
+        # x: tensor of shape (batch_size, heads, timesteps, input_dim_per_head)
         x, attn = self.attention(query, key, value, mask=mask, dropout=self.dropout)
 
         # 3) "Concat" using a view and apply a final linear.
+        # x: tensor of shape (batch_size, timesteps, input_dim)
         x = x.transpose(1, 2).contiguous().view(batch_size, -1, self.h * self.d_k)
 
+        # tensor of shape (batch_size, timesteps, input_dim)
         return self.output_linear(x)
 
 
@@ -127,13 +187,6 @@ class TransformerBlock(nn.Module):
     """
 
     def __init__(self, hidden, attn_heads, feed_forward_hidden, dropout):
-        """
-        :param hidden: hidden size of transformer
-        :param attn_heads: head sizes of multi-head attention
-        :param feed_forward_hidden: feed_forward_hidden, usually 4*hidden_size
-        :param dropout: dropout rate
-        """
-
         super().__init__()
         self.attention = MultiHeadedAttention(h=attn_heads, d_model=hidden)
         self.feed_forward = PositionwiseFeedForward(d_model=hidden, d_ff=feed_forward_hidden, dropout=dropout)
@@ -142,6 +195,18 @@ class TransformerBlock(nn.Module):
         self.dropout = nn.Dropout(p=dropout)
 
     def forward(self, x, mask):
+        """
+        Parameters
+        ----------
+        x : ``torch.FloatTensor``, required.
+            A tensor of shape (batch_size, timesteps, input_dim)
+        mask : ``torch.FloatTensor``, optional (default = None).
+            A tensor of shape (batch_size, 1, timesteps, timesteps).
+
+        Returns
+        -------
+        A tensor of shape (batch_size, timesteps, input_dim)
+        """
         x = self.input_sublayer(x, lambda _x: self.attention.forward(_x, _x, _x, mask=mask))
         x = self.output_sublayer(x, self.feed_forward)
         return self.dropout(x)
@@ -212,12 +277,15 @@ class Transformer(Seq2SeqEncoder):
         where output_projection_dim = input_dim by default.
         """
 
-        # (batch_size, 1, timesteps, timesteps)
+        # (1, timesteps, input_dim)
         pos_embedding = self._position_embedding(inputs)
 
+        # (batch_size, 1, timesteps, timesteps)
         expanded_mask = (mask.unsqueeze(-1) * mask.unsqueeze(-2)).unsqueeze(1)
 
+        # (batch_size, timesteps, input_dim)
         outputs = (inputs + pos_embedding) * mask.unsqueeze(-1).float()
+
         for transformer in self._transformer_blocks:
             outputs = transformer.forward(outputs, expanded_mask)
 
