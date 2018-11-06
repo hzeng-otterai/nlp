@@ -25,8 +25,8 @@
         }
       }
     },
-    "embedding_dropout": 0.1,
-    "encoder": {
+    "embedding_dropout": 0.2,
+    "seq2seq_encoder": {
       "type": "lstm",
       "input_size": 300,
       "hidden_size": 100,
