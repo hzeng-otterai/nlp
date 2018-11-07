@@ -2,35 +2,9 @@ from overrides import overrides
 import math
 import torch
 from torch import nn
-import torch.nn.functional as F
 
-from allennlp.modules import Seq2SeqEncoder
-
-
-class LayerNorm(nn.Module):
-    """
-    Construct a layernorm module (See citation for details).
-    """
-    def __init__(self, features, eps=1e-6):
-        super(LayerNorm, self).__init__()
-        self.a_2 = nn.Parameter(torch.ones(features))
-        self.b_2 = nn.Parameter(torch.zeros(features))
-        self.eps = eps
-
-    def forward(self, x):
-        """
-        Parameters
-        ----------
-        x : ``torch.FloatTensor``, required.
-            A tensor of shape (batch_size, timesteps, input_dim)
-
-        Returns
-        -------
-        A tensor of shape (batch_size, timesteps, input_dim)
-        """
-        mean = x.mean(-1, keepdim=True)
-        std = x.std(-1, keepdim=True)
-        return self.a_2 * (x - mean) / (std + self.eps) + self.b_2
+from allennlp.modules import Seq2SeqEncoder, LayerNorm
+from allennlp.nn.util import masked_softmax, weighted_sum
 
 
 class SublayerConnection(nn.Module):
@@ -65,8 +39,17 @@ class Attention(nn.Module):
     """
     Compute Scaled Dot Product Attention
     """
+    def __init__(self, input_dim_per_head, dropout=0.1):
+        super().__init__()
+        self.input_dim_per_head = input_dim_per_head
+        self.scale = math.sqrt(input_dim_per_head)
 
-    def forward(self, query, key, value, mask=None, dropout=None):
+        if dropout:
+            self.dropout_layer = nn.Dropout(p=dropout)
+        else:
+            self.dropout_layer = None
+
+    def forward(self, query, key, value, mask=None):
         """
         Parameters
         ----------
@@ -77,7 +60,7 @@ class Attention(nn.Module):
         value : ``torch.FloatTensor``, required.
             A tensor of shape (batch_size, heads, timesteps, input_dim_per_head)
         mask : ``torch.FloatTensor``, optional (default = None).
-            A tensor of shape (batch_size, 1, timesteps, timesteps).
+            A tensor of shape (batch_size, timesteps).
 
         Returns
         -------
@@ -85,16 +68,18 @@ class Attention(nn.Module):
         result: A tensor of shape (batch_size, heads, timesteps, input_dim_per_head)
         attention: A tensor of shape (batch_size, heads, timesteps, timesteps)
         """
-        scores = torch.matmul(query, key.transpose(-2, -1)) \
-                 / math.sqrt(query.size(-1))
+        assert self.input_dim_per_head == query.size(-1)
+
+        scores = torch.matmul(query, key.transpose(-2, -1)) / self.scale
 
         if mask is not None:
-            scores = scores.masked_fill(mask == 0, -1e9)
+            expanded_mask = (mask.unsqueeze(-1) * mask.unsqueeze(-2)).unsqueeze(1)
+            p_attn = masked_softmax(scores, expanded_mask)
+        else:
+            p_attn = nn.functional.softmax(scores, dim=-1)
 
-        p_attn = F.softmax(scores, dim=-1)
-
-        if dropout is not None:
-            p_attn = dropout(p_attn)
+        if self.dropout_layer is not None:
+            p_attn = self.dropout_layer(p_attn)
 
         return torch.matmul(p_attn, value), p_attn
 
@@ -104,56 +89,52 @@ class MultiHeadedAttention(nn.Module):
     Take in model size and number of heads.
     """
 
-    def __init__(self, h, d_model, dropout=0.1):
+    def __init__(self, num_heads, input_dim, dropout=0.1):
         super().__init__()
-        assert d_model % h == 0
+        assert input_dim % num_heads == 0
 
-        # We assume d_v always equals d_k
-        self.d_k = d_model // h
-        self.h = h
+        # We assume d_v always equals dim_per_head
+        self.input_dim = input_dim
+        self.dim_per_head = input_dim // num_heads
+        self.num_heads = num_heads
 
-        self.linear_layers = nn.ModuleList([nn.Linear(d_model, d_model) for _ in range(3)])
-        self.output_linear = nn.Linear(d_model, d_model)
-        self.attention = Attention()
+        self.linear_layers = nn.ModuleList([nn.Linear(input_dim, input_dim) for _ in range(3)])
+        self.output_linear = nn.Linear(input_dim, input_dim)
+        self.attention = Attention(self.dim_per_head, dropout=dropout)
 
-        self.dropout = nn.Dropout(p=dropout)
-
-    def forward(self, query, key, value, mask=None):
+    def forward(self, inputs, mask=None):
         """
         Parameters
         ----------
-        query : ``torch.FloatTensor``, required.
-            A tensor of shape (batch_size, timesteps, input_dim)
-        key : ``torch.FloatTensor``, required.
-            A tensor of shape (batch_size, timesteps, input_dim)
-        value : ``torch.FloatTensor``, required.
+        inputs : ``torch.FloatTensor``, required.
             A tensor of shape (batch_size, timesteps, input_dim)
         mask : ``torch.FloatTensor``, optional (default = None).
-            A tensor of shape (batch_size, 1, timesteps, timesteps).
+            A tensor of shape (batch_size, timesteps).
 
         Returns
         -------
         A tensor of shape (batch_size, timesteps, output_projection_dim),
         where output_projection_dim = input_dim by default.
         """
+        query, key, value = inputs, inputs, inputs
         batch_size = query.size(0)
+        mask_float = mask.unsqueeze(-1).float()
 
-        # 1) Do all the linear projections in batch from d_model => h x d_k
+        # 1) Do all the linear projections in batch from input_dim => num_heads x dim_per_head
         # query, key, value: tensors of shape (batch_size, heads, timesteps, input_dim_per_head)
-        query, key, value = [l(x).view(batch_size, -1, self.h, self.d_k).transpose(1, 2)
+        query, key, value = [l(x).view(batch_size, -1, self.num_heads, self.dim_per_head).transpose(1, 2)
                              for l, x in zip(self.linear_layers, (query, key, value))]
 
         # 2) Apply attention on all the projected vectors in batch.
         # x: tensor of shape (batch_size, heads, timesteps, input_dim_per_head)
-        x, attn = self.attention(query, key, value, mask=mask, dropout=self.dropout)
+        x, _ = self.attention(query, key, value, mask=mask)
 
         # 3) "Concat" using a view and apply a final linear.
         # x: tensor of shape (batch_size, timesteps, input_dim)
-        x = x.transpose(1, 2).contiguous().view(batch_size, -1, self.h * self.d_k)
+        x = x.transpose(1, 2).contiguous().view(batch_size, -1, self.input_dim)
 
         # tensor of shape (batch_size, timesteps, input_dim)
         return self.output_linear(x)
-
 
 class GELU(nn.Module):
     """
@@ -169,10 +150,10 @@ class PositionwiseFeedForward(nn.Module):
     Implements FFN equation.
     """
 
-    def __init__(self, d_model, d_ff, dropout=0.1):
+    def __init__(self, input_dim, d_ff, dropout=0.1):
         super(PositionwiseFeedForward, self).__init__()
-        self.w_1 = nn.Linear(d_model, d_ff)
-        self.w_2 = nn.Linear(d_ff, d_model)
+        self.w_1 = nn.Linear(input_dim, d_ff)
+        self.w_2 = nn.Linear(d_ff, input_dim)
         self.dropout = nn.Dropout(dropout)
         self.activation = GELU()
 
@@ -188,13 +169,13 @@ class TransformerBlock(nn.Module):
 
     def __init__(self, hidden, attn_heads, feed_forward_hidden, dropout):
         super().__init__()
-        self.attention = MultiHeadedAttention(h=attn_heads, d_model=hidden)
-        self.feed_forward = PositionwiseFeedForward(d_model=hidden, d_ff=feed_forward_hidden, dropout=dropout)
+        self.attention = MultiHeadedAttention(num_heads=attn_heads, input_dim=hidden)
+        self.feed_forward = PositionwiseFeedForward(input_dim=hidden, d_ff=feed_forward_hidden, dropout=dropout)
         self.input_sublayer = SublayerConnection(size=hidden, dropout=dropout)
         self.output_sublayer = SublayerConnection(size=hidden, dropout=dropout)
         self.dropout = nn.Dropout(p=dropout)
 
-    def forward(self, x, mask):
+    def forward(self, x, mask=None):
         """
         Parameters
         ----------
@@ -207,22 +188,22 @@ class TransformerBlock(nn.Module):
         -------
         A tensor of shape (batch_size, timesteps, input_dim)
         """
-        x = self.input_sublayer(x, lambda _x: self.attention.forward(_x, _x, _x, mask=mask))
+        x = self.input_sublayer(x, lambda _x: self.attention.forward(_x, mask=mask))
         x = self.output_sublayer(x, self.feed_forward)
         return self.dropout(x)
 
 
 class PositionalEmbedding(nn.Module):
 
-    def __init__(self, d_model, max_len=512):
+    def __init__(self, input_dim, max_len=512):
         super().__init__()
 
         # Compute the positional encodings once in log space.
-        pe = torch.zeros(max_len, d_model).float()
+        pe = torch.zeros(max_len, input_dim).float()
         pe.require_grad = False
 
         position = torch.arange(0, max_len).float().unsqueeze(1)
-        div_term = (torch.arange(0, d_model, 2) * -(math.log(10000.0) / d_model)).float().exp()
+        div_term = (torch.arange(0, input_dim, 2) * -(math.log(10000.0) / input_dim)).float().exp()
 
         pe[:, 0::2] = torch.sin(position * div_term)
         pe[:, 1::2] = torch.cos(position * div_term)
@@ -244,7 +225,7 @@ class Transformer(Seq2SeqEncoder):
 
         self._hidden_dim = hidden_dim
 
-        self._position_embedding = PositionalEmbedding(d_model=hidden_dim)
+        self._position_embedding = PositionalEmbedding(input_dim=hidden_dim)
 
         self._transformer_blocks = nn.ModuleList(
             [TransformerBlock(hidden_dim, num_heads, hidden_dim * 4, dropout) for _ in range(num_layers)])
@@ -281,13 +262,13 @@ class Transformer(Seq2SeqEncoder):
         pos_embedding = self._position_embedding(inputs)
 
         # (batch_size, 1, timesteps, timesteps)
-        expanded_mask = (mask.unsqueeze(-1) * mask.unsqueeze(-2)).unsqueeze(1)
+        # expanded_mask = (mask.unsqueeze(-1) * mask.unsqueeze(-2)).unsqueeze(1)
 
         # (batch_size, timesteps, input_dim)
         outputs = (inputs + pos_embedding) * mask.unsqueeze(-1).float()
 
         for transformer in self._transformer_blocks:
-            outputs = transformer.forward(outputs, expanded_mask)
+            outputs = transformer.forward(outputs, mask)
 
         return outputs
 
