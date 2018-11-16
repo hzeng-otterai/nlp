@@ -144,10 +144,10 @@ class BERTEmbeddings(nn.Module):
 
     def forward(self, words_embeddings, token_type_ids=None):
         batch_size, seq_length = words_embeddings.size(0), words_embeddings.size(1)
-        position_ids = torch.arange(seq_length, dtype=torch.long)
+        position_ids = torch.arange(seq_length, dtype=torch.long, device=words_embeddings.device)
         position_ids = position_ids.unsqueeze(0).expand(batch_size, -1)
         if token_type_ids is None:
-            token_type_ids = torch.zeros(batch_size, seq_length)
+            token_type_ids = torch.zeros(batch_size, seq_length, dtype=torch.long, device=words_embeddings.device)
 
         position_embeddings = self.position_embeddings(position_ids)
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
@@ -338,8 +338,6 @@ class BertModel(nn.Module):
 
         if attention_mask is None:
             attention_mask = torch.ones(batch_size, seq_length)
-        if token_type_ids is None:
-            token_type_ids = torch.zeros(batch_size, seq_length)
 
         # We create a 3D attention mask from a 2D tensor mask.
         # Sizes are [batch_size, 1, 1, to_seq_length]
@@ -378,6 +376,7 @@ class Transformer2(Seq2SeqEncoder):
             num_attention_heads=num_heads,
             hidden_dropout_prob=dropout
         )
+        self._hidden_dim = hidden_dim
         self._bert = BertModel(bert_config)
 
     def get_input_dim(self):
@@ -408,5 +407,5 @@ class Transformer2(Seq2SeqEncoder):
         where output_projection_dim = input_dim by default.
         """
 
-        return self._bert(inputs, mask)
+        return self._bert(inputs, attention_mask=mask)
 
