@@ -5,4 +5,5 @@ from my_library.models.contrastive_loss import ContrastiveLoss, CosineContrastiv
 from my_library.models.self_attentive_lstm import SelfAttentiveLstm, MaskedMultiHeadSelfAttention
 from my_library.models.transformer import Transformer
 from my_library.models.transformer2 import Transformer2
+from my_library.models.bert_embedder import BertEmbedder
 from my_library.models.sequence_classification import SequenceClassification
