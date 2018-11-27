@@ -26,8 +26,8 @@
     "text_field_embedder": {
       "token_embedders": {
         "tokens": {
-          "type": "bert_embedder",
-          "hidden_dim": 400,
+          "type": "bert_embedder3",
+          "hidden_dim": 400
         }
       }
     },

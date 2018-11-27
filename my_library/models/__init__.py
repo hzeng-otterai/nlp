@@ -7,4 +7,5 @@ from my_library.models.transformer import Transformer
 from my_library.models.transformer2 import Transformer2
 from my_library.models.bert_embedder import BertEmbedder
 from my_library.models.bert_embedder2 import BertEmbedder2
+from my_library.models.bert_embedder3 import BertEmbedder3
 from my_library.models.sequence_classification import SequenceClassification
