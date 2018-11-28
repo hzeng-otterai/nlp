@@ -38,27 +38,13 @@ def swish(x):
 ACT2FN = {"gelu": gelu, "relu": F.relu, "swish": swish}
 
 
-class PositionwiseFeedForward(nn.Module):
-    "Implements FFN equation."
-
-    def __init__(self, d_model, d_ff, dropout=0.1):
-        super(PositionwiseFeedForward, self).__init__()
-        self.w_1 = nn.Linear(d_model, d_ff)
-        self.w_2 = nn.Linear(d_ff, d_model)
-        self.dropout = nn.Dropout(dropout)
-        self.activation = ACT2FN["gelu"]
-
-    def forward(self, x):
-        return self.w_2(self.dropout(self.activation(self.w_1(x))))
-
-
 class BertLayerNorm(nn.Module):
     "Construct a layernorm module (See citation for details)."
 
-    def __init__(self, features, eps=1e-6):
+    def __init__(self, hidden_size, eps=1e-6):
         super(BertLayerNorm, self).__init__()
-        self.gamma = nn.Parameter(torch.ones(features))
-        self.beta = nn.Parameter(torch.zeros(features))
+        self.gamma = nn.Parameter(torch.ones(hidden_size))
+        self.beta = nn.Parameter(torch.zeros(hidden_size))
         self.variance_epsilon = eps
 
     def forward(self, x):
@@ -71,15 +57,15 @@ class BertLayerNorm(nn.Module):
 class BertEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings.
     """
-    def __init__(self, vocab_size, embed_size, dropout=0.1, max_len=512, type_vocab_size=3):
+    def __init__(self, vocab_size, hidden_size, dropout=0.1, max_position_embeddings=512, type_vocab_size=3):
         super(BertEmbeddings, self).__init__()
-        self.word_embeddings = nn.Embedding(vocab_size, embed_size)
-        self.position_embeddings = nn.Embedding(max_len, embed_size)
-        self.token_type_embeddings = nn.Embedding(type_vocab_size, embed_size)
+        self.word_embeddings = nn.Embedding(vocab_size, hidden_size)
+        self.position_embeddings = nn.Embedding(max_position_embeddings, hidden_size)
+        self.token_type_embeddings = nn.Embedding(type_vocab_size, hidden_size)
 
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
         # any TensorFlow checkpoint file
-        self.LayerNorm = BertLayerNorm(embed_size)
+        self.LayerNorm = BertLayerNorm(hidden_size)
         self.dropout = nn.Dropout(p=dropout)
 
     def forward(self, input_ids, token_type_ids=None):
@@ -99,59 +85,69 @@ class BertEmbeddings(nn.Module):
         return embeddings
 
 
-class Attention(nn.Module):
-    """
-    Compute 'Scaled Dot Product Attention
-    """
+class BertSelfAttention(nn.Module):
+    def __init__(self, num_attention_heads, hidden_size, attention_probs_dropout_prob=0.1):
+        super(BertSelfAttention, self).__init__()
+        if hidden_size % num_attention_heads != 0:
+            raise ValueError(
+                "The hidden size (%d) is not a multiple of the number of attention "
+                "heads (%d)" % (hidden_size, num_attention_heads))
+        self.num_attention_heads = num_attention_heads
+        self.attention_head_size = int(hidden_size / num_attention_heads)
+        self.all_head_size = self.num_attention_heads * self.attention_head_size
 
-    def forward(self, query, key, value, mask=None, dropout=None):
-        scores = torch.matmul(query, key.transpose(-2, -1)) \
-                 / math.sqrt(query.size(-1))
+        self.query = nn.Linear(hidden_size, self.all_head_size)
+        self.key = nn.Linear(hidden_size, self.all_head_size)
+        self.value = nn.Linear(hidden_size, self.all_head_size)
 
-        if mask is not None:
-            scores = scores.masked_fill(mask == 0, -1e9)
+        self.dropout = nn.Dropout(attention_probs_dropout_prob)
 
-        p_attn = F.softmax(scores, dim=-1)
+    def transpose_for_scores(self, x):
+        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
+        x = x.view(*new_x_shape)
+        return x.permute(0, 2, 1, 3)
 
-        if dropout is not None:
-            p_attn = dropout(p_attn)
+    def forward(self, hidden_states, attention_mask):
+        mixed_query_layer = self.query(hidden_states)
+        mixed_key_layer = self.key(hidden_states)
+        mixed_value_layer = self.value(hidden_states)
 
-        return torch.matmul(p_attn, value), p_attn
+        query_layer = self.transpose_for_scores(mixed_query_layer)
+        key_layer = self.transpose_for_scores(mixed_key_layer)
+        value_layer = self.transpose_for_scores(mixed_value_layer)
+
+        # Take the dot product between "query" and "key" to get the raw attention scores.
+        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
+        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
+        # Apply the attention mask is (precomputed for all layers in BertModel forward() function)
+        attention_scores = attention_scores + attention_mask
+
+        # Normalize the attention scores to probabilities.
+        attention_probs = nn.Softmax(dim=-1)(attention_scores)
+
+        # This is actually dropping out entire tokens to attend to, which might
+        # seem a bit unusual, but is taken from the original Transformer paper.
+        attention_probs = self.dropout(attention_probs)
+
+        context_layer = torch.matmul(attention_probs, value_layer)
+        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
+        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
+        context_layer = context_layer.view(*new_context_layer_shape)
+        return context_layer
 
 
-class BertAttention(nn.Module):
-    """
-    Take in model size and number of heads.
-    """
+class PositionwiseFeedForward(nn.Module):
+    "Implements FFN equation."
 
-    def __init__(self, h, d_model, dropout=0.1):
-        super().__init__()
-        assert d_model % h == 0
+    def __init__(self, d_model, d_ff, dropout=0.1):
+        super(PositionwiseFeedForward, self).__init__()
+        self.w_1 = nn.Linear(d_model, d_ff)
+        self.w_2 = nn.Linear(d_ff, d_model)
+        self.dropout = nn.Dropout(dropout)
+        self.activation = ACT2FN["gelu"]
 
-        # We assume d_v always equals d_k
-        self.d_k = d_model // h
-        self.h = h
-
-        self.linear_layers = nn.ModuleList([nn.Linear(d_model, d_model) for _ in range(3)])
-        self.output_linear = nn.Linear(d_model, d_model)
-        self.attention = Attention()
-
-        self.dropout = nn.Dropout(p=dropout)
-
-    def forward(self, query, key, value, mask=None):
-        batch_size = query.size(0)
-
-        # 1) Do all the linear projections in batch from d_model => h x d_k
-        query, key, value = [l(x).view(batch_size, -1, self.h, self.d_k).transpose(1, 2)
-                             for l, x in zip(self.linear_layers, (query, key, value))]
-
-        # 2) Apply attention on all the projected vectors in batch.
-        x, attn = self.attention(query, key, value, mask=mask, dropout=self.dropout)
-
-        # 3) "Concat" using a view and apply a final linear.
-        x = x.transpose(1, 2).contiguous().view(batch_size, -1, self.h * self.d_k)
-
-        return self.output_linear(x)
+    def forward(self, x):
+        return self.w_2(self.dropout(self.activation(self.w_1(x))))
 
 
 class BertLayer(nn.Module):
@@ -169,7 +165,7 @@ class BertLayer(nn.Module):
         """
 
         super().__init__()
-        self.attention = BertAttention(h=attn_heads, d_model=hidden)
+        self.attention = BertSelfAttention(num_attention_heads=attn_heads, hidden_size=hidden)
         self.feed_forward = PositionwiseFeedForward(d_model=hidden, d_ff=feed_forward_hidden, dropout=dropout)
 
         self.input_norm = BertLayerNorm(hidden)
@@ -183,7 +179,7 @@ class BertLayer(nn.Module):
     def forward(self, x, mask):
         old_x = x
         x = self.input_norm(x)
-        x = self.attention(x, x, x, mask=mask)
+        x = self.attention(x, attention_mask=mask)
         x = old_x + self.input_dropout(x)
 
         old_x = x
@@ -244,7 +240,7 @@ class BertModel(nn.Module):
         super().__init__()
 
         # embedding for BERT, sum of positional, segment, token embeddings
-        self.embedding = BertEmbeddings(vocab_size=vocab_size, embed_size=hidden)
+        self.embedding = BertEmbeddings(vocab_size=vocab_size, hidden_size=hidden)
 
         # multi-layers transformer blocks, deep network
         self.encoder = BertEncoder(hidden=hidden, n_layers=n_layers, attn_heads=attn_heads, dropout=dropout)
@@ -271,12 +267,27 @@ class BertModel(nn.Module):
     def forward(self, x, token_type_ids=None, attention_mask=None):
         # attention masking for padded token
         # torch.ByteTensor([batch_size, 1, seq_len, seq_len)
-        mask = attention_mask.unsqueeze(1).repeat(1, x.size(1), 1).unsqueeze(1)
+        #mask = attention_mask.unsqueeze(1).repeat(1, x.size(1), 1).unsqueeze(1)
+
+        # We create a 3D attention mask from a 2D tensor mask.
+        # Sizes are [batch_size, 1, 1, to_seq_length]
+        # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
+        # this attention mask is more simple than the triangular masking of causal attention
+        # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
+        extended_attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
+
+        # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
+        # masked positions, this operation will create a tensor which is 0.0 for
+        # positions we want to attend and -10000.0 for masked positions.
+        # Since we are adding it to the raw scores before the softmax, this is
+        # effectively the same as removing these entirely.
+        extended_attention_mask = extended_attention_mask.to(dtype=next(self.parameters()).dtype) # fp16 compatibility
+        extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
 
         # embedding the indexed sequence to sequence of vectors
         x = self.embedding(x, token_type_ids)
 
-        encoded_layers = self.encoder(x, attention_mask=mask)
+        encoded_layers = self.encoder(x, attention_mask=extended_attention_mask)
         sequence_output = encoded_layers[-1]
         pooled_output = self.pooler(sequence_output)
 
