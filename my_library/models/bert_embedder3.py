@@ -14,13 +14,28 @@ from allennlp.modules.token_embedders.token_embedder import TokenEmbedder
 from allennlp.data import Vocabulary
 from allennlp.common import Params
 
-class GELU(nn.Module):
-    """
-    Paper Section 3.4, last paragraph notice that BERT used the GELU instead of RELU
-    """
+PRETRAINED_MODEL_ARCHIVE_MAP = {
+    'bert-base-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased.tar.gz",
+    'bert-large-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-uncased.tar.gz",
+    'bert-base-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-cased.tar.gz",
+    'bert-base-multilingual': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-multilingual.tar.gz",
+    'bert-base-chinese': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-chinese.tar.gz",
+}
+CONFIG_NAME = 'bert_config.json'
+WEIGHTS_NAME = 'pytorch_model.bin'
 
-    def forward(self, x):
-        return 0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
+def gelu(x):
+    """Implementation of the gelu activation function.
+        For information: OpenAI GPT's gelu is slightly different (and gives slightly different results):
+        0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
+    """
+    return x * 0.5 * (1.0 + torch.erf(x / math.sqrt(2.0)))
+
+
+def swish(x):
+    return x * torch.sigmoid(x)
+
+ACT2FN = {"gelu": gelu, "relu": F.relu, "swish": swish}
 
 
 class PositionwiseFeedForward(nn.Module):
@@ -31,103 +46,58 @@ class PositionwiseFeedForward(nn.Module):
         self.w_1 = nn.Linear(d_model, d_ff)
         self.w_2 = nn.Linear(d_ff, d_model)
         self.dropout = nn.Dropout(dropout)
-        self.activation = GELU()
+        self.activation = ACT2FN["gelu"]
 
     def forward(self, x):
         return self.w_2(self.dropout(self.activation(self.w_1(x))))
 
 
-class LayerNorm(nn.Module):
+class BertLayerNorm(nn.Module):
     "Construct a layernorm module (See citation for details)."
 
     def __init__(self, features, eps=1e-6):
-        super(LayerNorm, self).__init__()
-        self.a_2 = nn.Parameter(torch.ones(features))
-        self.b_2 = nn.Parameter(torch.zeros(features))
-        self.eps = eps
+        super(BertLayerNorm, self).__init__()
+        self.gamma = nn.Parameter(torch.ones(features))
+        self.beta = nn.Parameter(torch.zeros(features))
+        self.variance_epsilon = eps
 
     def forward(self, x):
-        mean = x.mean(-1, keepdim=True)
-        std = x.std(-1, keepdim=True)
-        return self.a_2 * (x - mean) / (std + self.eps) + self.b_2
+        u = x.mean(-1, keepdim=True)
+        s = (x - u).pow(2).mean(-1, keepdim=True)
+        x = (x - u) / torch.sqrt(s + self.variance_epsilon)
+        return self.gamma * x + self.beta
 
-class SublayerConnection(nn.Module):
+
+class BertEmbeddings(nn.Module):
+    """Construct the embeddings from word, position and token_type embeddings.
     """
-    A residual connection followed by a layer norm.
-    Note for code simplicity the norm is first as opposed to last.
-    """
+    def __init__(self, vocab_size, embed_size, dropout=0.1, max_len=512, type_vocab_size=3):
+        super(BertEmbeddings, self).__init__()
+        self.word_embeddings = nn.Embedding(vocab_size, embed_size)
+        self.position_embeddings = nn.Embedding(max_len, embed_size)
+        self.token_type_embeddings = nn.Embedding(type_vocab_size, embed_size)
 
-    def __init__(self, size, dropout):
-        super(SublayerConnection, self).__init__()
-        self.norm = LayerNorm(size)
-        self.dropout = nn.Dropout(dropout)
-
-    def forward(self, x, sublayer):
-        "Apply residual connection to any sublayer with the same size."
-        return x + self.dropout(sublayer(self.norm(x)))
-
-
-class TokenEmbedding(nn.Embedding):
-    def __init__(self, vocab_size, embed_size=512):
-        super().__init__(vocab_size, embed_size, padding_idx=0)
-
-
-class PositionalEmbedding(nn.Module):
-
-    def __init__(self, d_model, max_len=512):
-        super().__init__()
-
-        # Compute the positional encodings once in log space.
-        pe = torch.zeros(max_len, d_model).float()
-        pe.require_grad = False
-
-        position = torch.arange(0, max_len).float().unsqueeze(1)
-        div_term = (torch.arange(0, d_model, 2).float() * -(math.log(10000.0) / d_model)).exp()
-
-        pe[:, 0::2] = torch.sin(position * div_term)
-        pe[:, 1::2] = torch.cos(position * div_term)
-
-        pe = pe.unsqueeze(0)
-        self.register_buffer('pe', pe)
-
-    def forward(self, x):
-        return self.pe[:, :x.size(1)]
-
-
-class SegmentEmbedding(nn.Embedding):
-    def __init__(self, embed_size=512):
-        super().__init__(3, embed_size, padding_idx=0)
-
-
-class BERTEmbedding(nn.Module):
-    """
-    BERT Embedding which is consisted with under features
-        1. TokenEmbedding : normal embedding matrix
-        2. PositionalEmbedding : adding positional information using sin, cos
-        2. SegmentEmbedding : adding sentence segment info, (sent_A:1, sent_B:2)
-        sum of all these features are output of BERTEmbedding
-    """
-
-    def __init__(self, vocab_size, embed_size, dropout=0.1):
-        """
-        :param vocab_size: total vocab size
-        :param embed_size: embedding size of token embedding
-        :param dropout: dropout rate
-        """
-        super().__init__()
-        self.token = TokenEmbedding(vocab_size=vocab_size, embed_size=embed_size)
-        self.position = PositionalEmbedding(d_model=self.token.embedding_dim)
-        self.segment = SegmentEmbedding(embed_size=self.token.embedding_dim)
+        # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
+        # any TensorFlow checkpoint file
+        self.LayerNorm = BertLayerNorm(embed_size)
         self.dropout = nn.Dropout(p=dropout)
-        self.embed_size = embed_size
 
-    def forward(self, sequence, segment_label):
-        x = self.token(sequence) + self.position(sequence)
+    def forward(self, input_ids, token_type_ids=None):
+        seq_length = input_ids.size(1)
+        position_ids = torch.arange(seq_length, dtype=torch.long, device=input_ids.device)
+        position_ids = position_ids.unsqueeze(0).expand_as(input_ids)
+        if token_type_ids is None:
+            token_type_ids = torch.zeros_like(input_ids)
 
-        if segment_label is not None:
-        	x += self.segment(segment_label)
-        	
-        return self.dropout(x)
+        words_embeddings = self.word_embeddings(input_ids)
+        position_embeddings = self.position_embeddings(position_ids)
+        token_type_embeddings = self.token_type_embeddings(token_type_ids)
+
+        embeddings = words_embeddings + position_embeddings + token_type_embeddings
+        embeddings = self.LayerNorm(embeddings)
+        embeddings = self.dropout(embeddings)
+        return embeddings
+
 
 class Attention(nn.Module):
     """
@@ -149,7 +119,7 @@ class Attention(nn.Module):
         return torch.matmul(p_attn, value), p_attn
 
 
-class MultiHeadedAttention(nn.Module):
+class BertAttention(nn.Module):
     """
     Take in model size and number of heads.
     """
@@ -184,7 +154,7 @@ class MultiHeadedAttention(nn.Module):
         return self.output_linear(x)
 
 
-class TransformerBlock(nn.Module):
+class BertLayer(nn.Module):
     """
     Bidirectional Encoder = Transformer (self-attention)
     Transformer = MultiHead_Attention + Feed_Forward with sublayer connection
@@ -199,19 +169,65 @@ class TransformerBlock(nn.Module):
         """
 
         super().__init__()
-        self.attention = MultiHeadedAttention(h=attn_heads, d_model=hidden)
+        self.attention = BertAttention(h=attn_heads, d_model=hidden)
         self.feed_forward = PositionwiseFeedForward(d_model=hidden, d_ff=feed_forward_hidden, dropout=dropout)
-        self.input_sublayer = SublayerConnection(size=hidden, dropout=dropout)
-        self.output_sublayer = SublayerConnection(size=hidden, dropout=dropout)
+
+        self.input_norm = BertLayerNorm(hidden)
+        self.input_dropout = nn.Dropout(dropout)
+
+        self.output_norm = BertLayerNorm(hidden)
+        self.output_dropout = nn.Dropout(dropout)
+
         self.dropout = nn.Dropout(p=dropout)
 
     def forward(self, x, mask):
-        x = self.input_sublayer(x, lambda _x: self.attention.forward(_x, _x, _x, mask=mask))
-        x = self.output_sublayer(x, self.feed_forward)
+        old_x = x
+        x = self.input_norm(x)
+        x = self.attention(x, x, x, mask=mask)
+        x = old_x + self.input_dropout(x)
+
+        old_x = x
+        x = self.output_norm(x)
+        x = self.feed_forward(x)
+        x = old_x + self.output_dropout(x)
+
         return self.dropout(x)
 
 
-class BERT(nn.Module):
+class BertEncoder(nn.Module):
+    def __init__(self, hidden=768, n_layers=12, attn_heads=12, dropout=0.1):
+
+        super().__init__()
+        # multi-layers transformer blocks, deep network
+        self.transformer_blocks = nn.ModuleList(
+            [BertLayer(hidden, attn_heads, hidden * 4, dropout) for _ in range(n_layers)])
+
+    def forward(self, x, attention_mask=None, output_all_encoded_layers=True):
+        all_encoder_layers = []
+        # running over multiple transformer blocks
+        for transformer in self.transformer_blocks:
+            x = transformer.forward(x, attention_mask)
+            all_encoder_layers.append(x)
+
+        return all_encoder_layers
+
+
+class BertPooler(nn.Module):
+    def __init__(self, hidden_size):
+        super(BertPooler, self).__init__()
+        self.dense = nn.Linear(hidden_size, hidden_size)
+        self.activation = nn.Tanh()
+
+    def forward(self, hidden_states):
+        # We "pool" the model by simply taking the hidden state corresponding
+        # to the first token.
+        first_token_tensor = hidden_states[:, 0]
+        pooled_output = self.dense(first_token_tensor)
+        pooled_output = self.activation(pooled_output)
+        return pooled_output
+
+
+class BertModel(nn.Module):
     """
     BERT model : Bidirectional Encoder Representations from Transformers.
     """
@@ -226,33 +242,45 @@ class BERT(nn.Module):
         """
 
         super().__init__()
-        self.hidden = hidden
-        self.n_layers = n_layers
-        self.attn_heads = attn_heads
-
-        # paper noted they used 4*hidden_size for ff_network_hidden_size
-        self.feed_forward_hidden = hidden * 4
 
         # embedding for BERT, sum of positional, segment, token embeddings
-        self.embedding = BERTEmbedding(vocab_size=vocab_size, embed_size=hidden)
+        self.embedding = BertEmbeddings(vocab_size=vocab_size, embed_size=hidden)
 
         # multi-layers transformer blocks, deep network
-        self.transformer_blocks = nn.ModuleList(
-            [TransformerBlock(hidden, attn_heads, hidden * 4, dropout) for _ in range(n_layers)])
+        self.encoder = BertEncoder(hidden=hidden, n_layers=n_layers, attn_heads=attn_heads, dropout=dropout)
 
-    def forward(self, x, segment_info=None):
+        self.pooler = BertPooler(hidden_size=hidden)
+
+        self.apply(self.init_bert_weights)
+
+    def init_bert_weights(self, module):
+        """ Initialize the weights.
+        """
+
+        initializer_range = 0.02
+        if isinstance(module, (nn.Linear, nn.Embedding)):
+            # Slightly different from the TF version which uses truncated_normal for initialization
+            # cf https://github.com/pytorch/pytorch/pull/5617
+            module.weight.data.normal_(mean=0.0, std=initializer_range)
+        elif isinstance(module, BertLayerNorm):
+            module.beta.data.normal_(mean=0.0, std=initializer_range)
+            module.gamma.data.normal_(mean=0.0, std=initializer_range)
+        if isinstance(module, nn.Linear) and module.bias is not None:
+            module.bias.data.zero_()
+
+    def forward(self, x, token_type_ids=None, attention_mask=None):
         # attention masking for padded token
         # torch.ByteTensor([batch_size, 1, seq_len, seq_len)
-        mask = (x > 0).unsqueeze(1).repeat(1, x.size(1), 1).unsqueeze(1)
+        mask = attention_mask.unsqueeze(1).repeat(1, x.size(1), 1).unsqueeze(1)
 
         # embedding the indexed sequence to sequence of vectors
-        x = self.embedding(x, segment_info)
+        x = self.embedding(x, token_type_ids)
 
-        # running over multiple transformer blocks
-        for transformer in self.transformer_blocks:
-            x = transformer.forward(x, mask)
+        encoded_layers = self.encoder(x, attention_mask=mask)
+        sequence_output = encoded_layers[-1]
+        pooled_output = self.pooler(sequence_output)
 
-        return x
+        return sequence_output, pooled_output
 
 
 @TokenEmbedder.register("bert_embedder3")
@@ -265,17 +293,18 @@ class BertEmbedder3(TokenEmbedder):
                  dropout: float = 0.1) -> None:
         super(BertEmbedder3, self).__init__()
 
-        self._bert = BERT(vocab_size, 
-        				  hidden=hidden_dim, 
-        				  n_layers=num_layers, 
-        				  attn_heads=num_heads, 
-        				  dropout=dropout)
+        self._hidden_dim = hidden_dim
+        self._bert = BertModel(vocab_size,
+                          hidden=hidden_dim, 
+                          n_layers=num_layers, 
+                          attn_heads=num_heads, 
+                          dropout=dropout)
 
     def get_output_dim(self):
         """
         The last dimension of the output, not the shape.
         """
-        return self._bert.hidden
+        return self._hidden_dim
 
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
         """
@@ -292,8 +321,9 @@ class BertEmbedder3(TokenEmbedder):
         """
         # pylint: disable=arguments-differ
 
-        encoded = self._bert(inputs)
-        return encoded
+        mask = (inputs != 0).long()
+        sequence_output, pooled_output = self._bert(inputs, attention_mask=mask)
+        return sequence_output
 
     # Custom logic requires custom from_params.
     @classmethod
