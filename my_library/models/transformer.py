@@ -1,3 +1,9 @@
+# coding=utf-8
+"""
+PyTorch BERT model.
+Slightly modified from https://github.com/codertimo/BERT-pytorch
+"""
+
 from overrides import overrides
 import math
 import torch

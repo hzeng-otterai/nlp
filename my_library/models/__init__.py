@@ -4,7 +4,11 @@ from my_library.models.esim_cosine import ESIMCosine
 from my_library.models.contrastive_loss import ContrastiveLoss, CosineContrastiveLoss
 from my_library.models.self_attentive_lstm import SelfAttentiveLstm, MaskedMultiHeadSelfAttention
 from my_library.models.transformer import Transformer
+from my_library.models.transformer2 import Transformer2
+from my_library.models.bert_embedder import BertEmbedder
+from my_library.models.bert_embedder2 import BertEmbedder2
+from my_library.models.bert_embedder3 import BertEmbedder3
 from my_library.models.sequence_classification import SequenceClassification
-
 from my_library.models.csv_file_reader import CsvFileDatasetReader
 from my_library.models.simple_classifier_predictor import SimpleClassifierPredictor
+
