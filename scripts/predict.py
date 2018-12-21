@@ -10,14 +10,21 @@ import os.path as op
 from allennlp.commands import main
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print("Usage: python predict.py <test_file>")
+    if len(sys.argv) < 3:
+        print("Usage: python predict.py <test_file> <output_file> <predictor>")
         sys.exit(0)
         
     test_path = sys.argv[1]
     if not op.isfile(test_path):
         print("Test file %s does not exist." % test_path)
         sys.exit(1)
+        
+    output_path = sys.argv[2]
+    
+    if len(sys.argv) > 3:
+        predictor = sys.argv[3]
+    else:
+        predictor = None
 
     # getting the last updated model
     files = list(filter(op.isfile, glob.glob("./output_*/model.tar.gz")))
@@ -30,10 +37,14 @@ if __name__ == "__main__":
         "predict",
         model_path,
         test_path,
+        "--output-file", output_path,
         "--include-package", "my_library",
-        "--predictor", "textual-entailment",
-        "--cuda-device", "-1"
+        "--use-dataset-reader",
+        "--cuda-device", "0"
     ]
+    
+    if predictor is not None:
+        sys.argv += ["--predictor", predictor]
 
     logging.basicConfig(level=logging.INFO)
 

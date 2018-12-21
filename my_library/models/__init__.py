@@ -5,3 +5,6 @@ from my_library.models.contrastive_loss import ContrastiveLoss, CosineContrastiv
 from my_library.models.self_attentive_lstm import SelfAttentiveLstm, MaskedMultiHeadSelfAttention
 from my_library.models.transformer import Transformer
 from my_library.models.sequence_classification import SequenceClassification
+
+from my_library.models.csv_file_reader import CsvFileDatasetReader
+from my_library.models.simple_classifier_predictor import SimpleClassifierPredictor
