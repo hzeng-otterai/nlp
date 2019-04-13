@@ -7,36 +7,42 @@
       "word_splitter": {
         "type": "just_spaces"
       }
+    },
+    "token_indexers": {
+      "elmo": {
+        "type": "elmo_characters"
+      }
     }
   },
-  "train_data_path": "/data/_working/sentiment/small/train.csv",
-  "validation_data_path": "/data/_working/sentiment/small/dev.csv",
+  "train_data_path": "/data/_working/sentiment/large/train.csv",
+  "validation_data_path": "/data/_working/sentiment/large/dev.csv",
   "test_data_path": "/data/_working/sentiment/test_hr_tok.csv",
   "evaluate_on_test": true,
   "model": {
     "type": "sequence_classification",
     "text_field_embedder": {
       "token_embedders": {
-        "tokens": {
-            "pretrained_file": "https://s3-us-west-2.amazonaws.com/allennlp/datasets/glove/glove.840B.300d.txt.gz",
-            "type": "embedding",
-            "embedding_dim": 300,
-            "trainable": false
+        "elmo":{
+            "type": "elmo_token_embedder",
+            "options_file": "https://s3-us-west-2.amazonaws.com/allennlp/models/elmo/2x4096_512_2048cnn_2xhighway/elmo_2x4096_512_2048cnn_2xhighway_options.json",
+            "weight_file": "https://s3-us-west-2.amazonaws.com/allennlp/models/elmo/2x4096_512_2048cnn_2xhighway/elmo_2x4096_512_2048cnn_2xhighway_weights.hdf5",
+            "do_layer_norm": false,
+            "dropout": 0.0
         }
       }
     },
     "embedding_dropout": 0.2,
     "seq2seq_encoder": {
       "type": "lstm",
-      "input_size": 300,
-      "hidden_size": 100,
+      "input_size": 1024,
+      "hidden_size": 300,
       "num_layers": 1,
       "bidirectional": true
     },
     "classifier_feedforward": {
-      "input_dim": 200,
+      "input_dim": 600,
       "num_layers": 2,
-      "hidden_dims": [100, 3],
+      "hidden_dims": [300, 3],
       "activations": ["relu", "linear"],
       "dropout": [0.2, 0.0]
     }

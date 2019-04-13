@@ -24,7 +24,7 @@ class CsvFileDatasetReader(DatasetReader):
                  tokenizer: Tokenizer = None,
                  token_indexers: Dict[str, TokenIndexer] = None) -> None:
         super().__init__(lazy)
-        self._tokenizer = tokenizer or WordTokenizer(JustSpacesWordSplitter())
+        self._tokenizer = tokenizer or WordTokenizer()
         self._token_indexers = token_indexers or {"tokens": SingleIdTokenIndexer()}
 
     @overrides
@@ -41,6 +41,7 @@ class CsvFileDatasetReader(DatasetReader):
         if len(text) == 0:
             text = "."
         tokenized_text = self._tokenizer.tokenize(text)
+        tokenized_text = tokenized_text[:256]
         text_field = TextField(tokenized_text, self._token_indexers)
         fields = {'tokens': text_field}
         if label is not None:
