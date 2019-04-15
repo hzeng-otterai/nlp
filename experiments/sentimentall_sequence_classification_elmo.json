@@ -16,7 +16,7 @@
   },
   "train_data_path": "/data/_working/sentiment/large/train.csv",
   "validation_data_path": "/data/_working/sentiment/large/dev.csv",
-  "test_data_path": "/data/_working/sentiment/test_hr_tok.csv",
+  "test_data_path": "/data/_working/sentiment/large/test.csv",
   "evaluate_on_test": true,
   "model": {
     "type": "sequence_classification",
@@ -42,7 +42,7 @@
     "classifier_feedforward": {
       "input_dim": 600,
       "num_layers": 2,
-      "hidden_dims": [300, 3],
+      "hidden_dims": [300, 4],
       "activations": ["relu", "linear"],
       "dropout": [0.2, 0.0]
     }
