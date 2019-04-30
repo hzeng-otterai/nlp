@@ -40,6 +40,8 @@ if __name__ == "__main__":
         "--output-file", output_path,
         "--include-package", "my_library",
         "--use-dataset-reader",
+        "--silent",
+        "--batch-size", "64",
         "--cuda-device", "0"
     ]
     
