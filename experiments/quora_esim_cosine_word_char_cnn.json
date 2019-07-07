@@ -1,0 +1,106 @@
+{
+  "dataset_reader": {
+    "type": "quora_paraphrase",
+    "lazy": false,
+    "tokenizer": {
+      "type": "word",
+      "word_splitter": {
+        "type": "just_spaces"
+      }
+    },
+    "token_indexers": {
+      "tokens": {
+        "type": "single_id",
+        "lowercase_tokens": false
+      },
+      "token_characters": {
+        "type": "characters"
+      }
+    }
+  },
+  "train_data_path": "https://s3-us-west-2.amazonaws.com/allennlp/datasets/quora-question-paraphrase/train.tsv",
+  "validation_data_path": "https://s3-us-west-2.amazonaws.com/allennlp/datasets/quora-question-paraphrase/dev.tsv",
+  "test_data_path": "https://s3-us-west-2.amazonaws.com/allennlp/datasets/quora-question-paraphrase/test.tsv",
+  "evaluate_on_test": true,
+  "model": {
+    "type": "esim_cosine",
+    "dropout": 0.1,
+    "text_field_embedder": {
+      "token_embedders": {
+        "tokens": {
+          "type": "embedding",
+          "pretrained_file": "https://s3-us-west-2.amazonaws.com/allennlp/datasets/glove/glove.840B.300d.txt.gz",
+          "embedding_dim": 300,
+          "trainable": false,
+          "padding_index": 0
+        },
+        "token_characters": {
+          "type": "character_encoding",
+          "embedding": {
+            "embedding_dim": 20,
+            "padding_index": 0
+          },
+          "encoder": {
+            "type": "cnn",
+            "embedding_dim": 20,
+            "ngram_filter_sizes": [5],
+            "num_filters": 100
+          }
+        }
+      }
+    },
+    "encoder": {
+      "type": "lstm",
+      "input_size": 400,
+      "hidden_size": 100,
+      "num_layers": 1,
+      "bidirectional": true
+    },
+    "similarity_function": {"type": "dot_product"},
+    "projection_feedforward": {
+      "input_dim": 800,
+      "hidden_dims": 100,
+      "num_layers": 1,
+      "activations": "relu"
+    },
+    "inference_encoder": {
+      "type": "lstm",
+      "input_size": 100,
+      "hidden_size": 100,
+      "num_layers": 1,
+      "bidirectional": true
+    },
+    "output_feedforward": {
+      "input_dim": 400,
+      "num_layers": 2,
+      "hidden_dims": [200, 100],
+      "activations": ["relu", "linear"],
+      "dropout": [0.1, 0.0]
+    },
+    "initializer": [
+      [".*linear_layers.*weight", {"type": "xavier_uniform"}],
+      [".*linear_layers.*bias", {"type": "zero"}],
+      [".*weight_ih.*", {"type": "xavier_uniform"}],
+      [".*weight_hh.*", {"type": "orthogonal"}],
+      [".*bias_ih.*", {"type": "zero"}],
+      [".*bias_hh.*", {"type": "lstm_hidden_bias"}]
+    ]
+  },
+  "iterator": {
+    "type": "bucket",
+    "padding_noise": 0.1,
+    "sorting_keys": [["premise", "num_tokens"], ["hypothesis", "num_tokens"]],
+    "batch_size": 64
+  },
+  "trainer": {
+    "num_epochs": 40,
+    "patience": 10,
+    "grad_norm": 10.0,
+    "validation_metric": "+accuracy",
+    "cuda_device": 0,
+    "optimizer": {
+        "type": "adam",
+        "lr": 0.001
+    }
+  }
+}

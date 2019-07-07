@@ -1,0 +1,51 @@
+{
+  "dataset_reader":{
+    "type": "csv_file",
+    "lazy": true,
+    "tokenizer": {
+      "type": "word",
+      "word_splitter": {
+        "type": "just_spaces"
+      }
+    }
+  },
+  "train_data_path": "/data/_working/sentiment/large/train.csv",
+  "validation_data_path": "/data/_working/sentiment/large/dev.csv",
+  "test_data_path": "/data/_working/sentiment/large/test.csv",
+  "evaluate_on_test": true,
+  "model": {
+    "type": "basic_classifier",
+    "text_field_embedder": {
+      "token_embedders": {
+        "tokens": {
+            "pretrained_file": "https://s3-us-west-2.amazonaws.com/allennlp/datasets/glove/glove.840B.300d.txt.gz",
+            "type": "embedding",
+            "embedding_dim": 300,
+            "trainable": false
+        }
+      }
+    },
+    "dropout": 0.2,
+    "seq2vec_encoder": {
+      "type": "cnn",
+      "embedding_dim": 300,
+      "num_filters": 200
+    }
+  },
+  "iterator": {
+    "type": "bucket",
+    "sorting_keys": [["tokens", "num_tokens"]],
+    "batch_size" : 64
+  },
+  "trainer": {
+    "num_epochs": 40,
+    "patience": 5,
+    "grad_norm": 5.0,
+    "validation_metric": "+accuracy",
+    "cuda_device": 0,
+    "optimizer": {
+      "type": "adam",
+      "lr": 0.001
+    }
+  }
+}
